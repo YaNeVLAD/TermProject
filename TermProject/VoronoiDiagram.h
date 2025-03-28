@@ -9,7 +9,7 @@ namespace path_finder
 struct Segment;
 struct GraphNode;
 
-class VoronoiDiargram
+class VoronoiDiagram
 {
 public:
 	struct Edge
@@ -33,7 +33,7 @@ public:
 		double GetClearanceAt(const Point& point) const;
 	};
 
-	VoronoiDiargram(std::vector<Obstacle>& obstacles);
+	VoronoiDiagram(std::vector<Obstacle>& obstacles);
 	std::vector<Edge> GetEdges() const;
 	std::vector<Obstacle>& GetObstacles() const;
 	std::vector<std::vector<GraphNode>> DiscretizeEdges(double epsilon) const;
@@ -54,7 +54,7 @@ struct GraphNode
 	Point position;
 	double clearance;
 	size_t edge_index;
-	const VoronoiDiargram::Edge* edge;
+	const VoronoiDiagram::Edge* edge;
 	const Obstacle* nearest_obstacle;
 	bool is_temporary = false;
 

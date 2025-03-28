@@ -17,7 +17,7 @@ int main()
 		std::vector<tp::Shapes::Polygon> polygons;
 		std::vector<path_finder::Obstacle> obstacles;
 		path_finder::Obstacle currentObstacle;
-		path_finder::IntervalGraph graph(obstacles);
+		IntervalGraph graph;
 		bool buildingObstacle = false;
 		std::vector<tp::Shapes::Segment> graphEdges;
 
@@ -40,27 +40,28 @@ int main()
 					std::cout << "Obstacle completed with " << currentObstacle.Vertices().size() << " points" << std::endl;
 
 					polygons.clear();
+					graphEdges.clear();
 					voronoiEdges.clear();
 					intervalSegments.clear();
-					path_finder::VoronoiDiargram vd(obstacles);
+					path_finder::VoronoiDiagram vd(obstacles);
 
-					graph.Build(vd, 0.1);
+					graph.Build(vd, 100);
 					auto path = graph.FindPath(start, end);
-					// for (size_t i = 1; i < path.size(); ++i)
-					//{
-					//	graphEdges.push_back(tp::Shapes::Segment{
-					//		{ static_cast<float>(path[i - 1].X), static_cast<float>(path[i - 1].Y) },
-					//		{ static_cast<float>(path[i].X), static_cast<float>(path[i].Y) },
-					//	});
-					// }
-
-					for (size_t i = 1; i < graph.nodes.size(); ++i)
+					for (size_t i = 1; i < path.size(); ++i)
 					{
 						graphEdges.push_back(tp::Shapes::Segment{
-							{ static_cast<float>(graph.nodes[i - 1].position.X), static_cast<float>(graph.nodes[i - 1].position.Y) },
-							{ static_cast<float>(graph.nodes[i].position.X), static_cast<float>(graph.nodes[i].position.Y) },
+							{ static_cast<float>(path[i - 1].X), static_cast<float>(path[i - 1].Y) },
+							{ static_cast<float>(path[i].X), static_cast<float>(path[i].Y) },
 						});
 					}
+
+					// for (size_t i = 1; i < graph.nodes.size(); ++i)
+					//{
+					//	graphEdges.push_back(tp::Shapes::Segment{
+					//		{ static_cast<float>(graph.nodes[i - 1].position.X), static_cast<float>(graph.nodes[i - 1].position.Y) },
+					//		{ static_cast<float>(graph.nodes[i].position.X), static_cast<float>(graph.nodes[i].position.Y) },
+					//	});
+					// }
 
 					// auto intervals = vd.DiscretizeEdges(1);
 
@@ -125,14 +126,14 @@ int main()
 				window.Draw(polygon);
 			}
 
-			for (const auto& edge : graphEdges)
-			{
-				window.Draw(edge, sf::Color::Blue);
-			}
-
 			for (const auto& edge : voronoiEdges)
 			{
 				window.Draw(edge);
+			}
+
+			for (const auto& edge : graphEdges)
+			{
+				window.Draw(edge, sf::Color::Blue);
 			}
 
 			for (const auto& edge : intervalSegments)

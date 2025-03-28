@@ -10,7 +10,7 @@ namespace path_finder
 {
 using BoostSegment = std::pair<boost::polygon::point_data<double>, boost::polygon::point_data<double>>;
 
-double VoronoiDiargram::Edge::GetClearanceAt(const Point& point) const
+double VoronoiDiagram::Edge::GetClearanceAt(const Point& point) const
 {
 	double left_dist = std::numeric_limits<double>::max();
 	double right_dist = std::numeric_limits<double>::max();
@@ -54,23 +54,23 @@ struct segment_traits<path_finder::BoostSegment>
 namespace path_finder
 {
 
-VoronoiDiargram::VoronoiDiargram(std::vector<Obstacle>& obstacles)
+VoronoiDiagram::VoronoiDiagram(std::vector<Obstacle>& obstacles)
 	: m_Obstacles(obstacles)
 {
 	ConstructVoronoi();
 }
 
-std::vector<VoronoiDiargram::Edge> VoronoiDiargram::GetEdges() const
+std::vector<VoronoiDiagram::Edge> VoronoiDiagram::GetEdges() const
 {
 	return m_Edges;
 }
 
-std::vector<Obstacle>& VoronoiDiargram::GetObstacles() const
+std::vector<Obstacle>& VoronoiDiagram::GetObstacles() const
 {
 	return m_Obstacles;
 }
 
-std::vector<std::vector<GraphNode>> VoronoiDiargram::DiscretizeEdges(double epsilon) const
+std::vector<std::vector<GraphNode>> VoronoiDiagram::DiscretizeEdges(double epsilon) const
 {
 	std::vector<std::vector<GraphNode>> intervals;
 	double clearance = 0;
@@ -97,7 +97,7 @@ std::vector<std::vector<GraphNode>> VoronoiDiargram::DiscretizeEdges(double epsi
 	return intervals;
 }
 
-std::vector<std::pair<size_t, size_t>> VoronoiDiargram::GetAdjacentIntervals() const
+std::vector<std::pair<size_t, size_t>> VoronoiDiagram::GetAdjacentIntervals() const
 {
 	std::vector<std::pair<size_t, size_t>> adjacents;
 
@@ -116,7 +116,7 @@ std::vector<std::pair<size_t, size_t>> VoronoiDiargram::GetAdjacentIntervals() c
 	return adjacents;
 }
 
-void VoronoiDiargram::ConstructVoronoi()
+void VoronoiDiagram::ConstructVoronoi()
 {
 	using namespace boost::polygon;
 
@@ -183,7 +183,7 @@ void VoronoiDiargram::ConstructVoronoi()
 	AnnotateEdges();
 }
 
-void VoronoiDiargram::AnnotateEdges()
+void VoronoiDiagram::AnnotateEdges()
 {
 	using namespace boost::polygon;
 
@@ -210,7 +210,7 @@ void VoronoiDiargram::AnnotateEdges()
 	}
 }
 
-bool VoronoiDiargram::SharesCell(const Edge& edge, const Obstacle* obstacle) const
+bool VoronoiDiagram::SharesCell(const Edge& edge, const Obstacle* obstacle) const
 {
 	return (edge.Left == obstacle) || (edge.Right == obstacle);
 }
