@@ -9,22 +9,13 @@
 #include "../../Utility/Logger/Logger.h"
 #include "../Structures/BoostCompat.h"
 
-#include <CGAL/Arr_segment_traits_2.h> // Добавить эту строку для отрезков
-#include <CGAL/Arrangement_2.h> // Добавить эту строку
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/enum.h> // Для CGAL::ON_UNBOUNDED_SIDE и т.п.
+#include <boost/geometry.hpp>
 
 #include <format>
 #include <optional>
 
 using namespace tp;
 using namespace tp::shapes;
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Arr_segment_traits_2<K> Traits_2;
-typedef CGAL::Arrangement_2<Traits_2> Arrangement;
-typedef K::Point_2 CGAL_Point;
-typedef K::Segment_2 CGAL_Segment;
 
 struct ObstacleFeature
 {
@@ -53,39 +44,37 @@ struct ObstacleFeature
 	}
 
 	// $\psi_o(x)$ - возвращает ближайшую точку на данной особенности 'o' к точке 'x'
-	Point getPsi(const shapes::Point& x) const
+	Point getPsi(const Point& p) const
 	{
 		if (type == Type::VERTEX)
 		{
 			return vertex_site;
 		}
-		else
-		{ // Type::SEGMENT
-			const shapes::Vec2D ab = segment_site.p2 - segment_site.p1;
-			const shapes::Vec2D ax = x - segment_site.p1; // Вектор от начала сегмента до точки x
+		// Type::SEGMENT
+		const Vec2D ab = segment_site.p2 - segment_site.p1;
+		const auto [x, y] = p - segment_site.p1; // Вектор от начала сегмента до точки x
 
-			const float ab_len_sq = ab.LengthSquared();
+		const float ab_len_sq = ab.LengthSquared();
 
-			// Если сегмент вырожден в точку
-			if (ab_len_sq < FLT_EPSILON * FLT_EPSILON)
-			{
-				return segment_site.p1;
-			}
-
-			// t = dot(ax, ab) / dot(ab, ab)
-			float t = (ax.x * ab.x + ax.y * ab.y) / ab_len_sq;
-
-			if (t < 0.0f)
-			{
-				return segment_site.p1; // Ближайшая точка - p1
-			}
-			else if (t > 1.0f)
-			{
-				return segment_site.p2; // Ближайшая точка - p2
-			}
-			// Проекция лежит на отрезке
-			return segment_site.p1 + ab.Scale(t);
+		// Если сегмент вырожден в точку
+		if (ab_len_sq < FLT_EPSILON * FLT_EPSILON)
+		{
+			return segment_site.p1;
 		}
+
+		// t = dot(ax, ab) / dot(ab, ab)
+		float t = (x * ab.x + y * ab.y) / ab_len_sq;
+
+		if (t < 0.0f)
+		{
+			return segment_site.p1; // Ближайшая точка - p1
+		}
+		if (t > 1.0f)
+		{
+			return segment_site.p2; // Ближайшая точка - p2
+		}
+		// Проекция лежит на отрезке
+		return segment_site.p1 + ab.Scale(t);
 	}
 };
 
@@ -93,21 +82,21 @@ namespace
 {
 bool Contains(const Point& point, const Polygon& polygon)
 {
-	int intersections = 0;
-	size_t n = polygon.size();
+	namespace bg = boost::geometry;
+	namespace bgm = boost::geometry::model;
 
-	for (size_t i = 0; i < n; ++i)
+	typedef bgm::d2::point_xy<double> boost_point_type;
+	typedef bgm::polygon<boost_point_type> boost_polygon_type;
+
+	boost_point_type bg_point(point.x, point.y);
+	boost_polygon_type bg_polygon;
+
+	for (const auto& [x, y] : polygon)
 	{
-		const auto& [ax, ay] = polygon[i];
-		const auto& [bx, by] = polygon[(i + 1) % n];
-
-		if (ay > point.y != (by > point.y) && point.x < (bx - ax) * (point.y - ay) / (by - ay) + ax)
-		{
-			intersections++;
-		}
+		bg::append(bg_polygon.outer(), boost_point_type(x, y));
 	}
 
-	return intersections % 2 == 1;
+	return bg::within(bg_point, bg_polygon);
 }
 
 struct BoostInputSourceInfo
@@ -156,11 +145,6 @@ VoronoiData ConstructRefined(
 		source_info_map.emplace_back(false, Segment{ p1, p2 }); // is_obstacle_related = false
 	};
 
-	Segment leftTop = { left, top };
-	Segment rightTop = { right, top };
-	Segment leftBottom = { left, bottom };
-	Segment rightBottom = { right, bottom };
-
 	add_border_segment({ left, top }, { right, top });
 	add_border_segment({ right, top }, { right, bottom });
 	add_border_segment({ right, bottom }, { left, bottom });
@@ -191,24 +175,6 @@ VoronoiData ConstructRefined(
 			if (p1 == p2)
 				return;
 
-			bool is_in_halo_or_poly = false;
-			Point mid((p1.x + p2.x) * 0.5f, (p1.y + p2.y) * 0.5f);
-
-			for (const auto& halo_poly : current_halos)
-			{
-				if (Contains(mid, halo_poly))
-				{
-					is_in_halo_or_poly = true;
-					break;
-				}
-			}
-			if (is_in_halo_or_poly)
-				return;
-
-			// Дополнительная проверка: не должно быть внутри исходных полигонов (если это не ребро самого полигона)
-			// Эта проверка может быть сложной для ребер типа (i) и (ii), которые по определению соединяются с особенностями.
-			// Пока оставим только проверку на гало.
-
 			if (p2 < p1)
 				std::swap(p1, p2); // Нормализация для set
 			if (!added_edges_tracker.contains({ p1, p2 }))
@@ -224,21 +190,8 @@ VoronoiData ConstructRefined(
 		if (edge.is_infinite() || !edge.vertex0() || !edge.vertex1())
 			continue;
 
-		Point start_vd(edge.vertex0()->x(), edge.vertex0()->y());
-		Point end_vd(edge.vertex1()->x(), edge.vertex1()->y());
-
-		bool is_inside_obstacle = false;
-		Point mid_vd((start_vd.x + end_vd.x) * 0.5f, (start_vd.y + end_vd.y) * 0.5f);
-		for (const auto& poly : polygons)
-		{ // Проверяем на попадание в исходные полигоны
-			if (Contains(mid_vd, poly))
-			{
-				is_inside_obstacle = true;
-				break;
-			}
-		}
-		if (is_inside_obstacle)
-			continue;
+		Point start_vd(static_cast<float>(edge.vertex0()->x()), static_cast<float>(edge.vertex0()->y()));
+		Point end_vd(static_cast<float>(edge.vertex1()->x()), static_cast<float>(edge.vertex1()->y()));
 
 		add_segment_if_valid(start_vd, end_vd, polygons, halos);
 	}
@@ -246,8 +199,9 @@ VoronoiData ConstructRefined(
 	// 2. Добавление ребер типа (i): x * \psi_o(x)
 	// Для каждой вершины диаграммы Вороного...
 	for (const auto& boost_v_ref : vd.vertices())
-	{ // vd.vertices() возвращает коллекцию vertex_type объектов
-		Point x_vor_vertex(boost_v_ref.x(), boost_v_ref.y());
+	{
+		// vd.vertices() возвращает коллекцию vertex_type объектов
+		Point x_vor_vertex(static_cast<float>(boost_v_ref.x()), static_cast<float>(boost_v_ref.y()));
 		const voronoi_edge<double>* incident_edge = boost_v_ref.incident_edge();
 		if (!incident_edge)
 			continue;
@@ -258,16 +212,15 @@ VoronoiData ConstructRefined(
 		const voronoi_edge<double>* current_iter_edge = incident_edge;
 		do
 		{
-			const voronoi_cell<double>* cell = current_iter_edge->cell();
-			if (cell)
+			if (const auto* cell = current_iter_edge->cell())
 			{
 				unsigned int source_idx = cell->source_index();
 
 				// Проверяем, не обработали ли мы уже этот сайт для данной вершины VD
 				// (один сайт может быть доступен через несколько полуребер вокруг вершины)
 				// Для большей надежности, можно было бы хранить пару (source_idx, category) или хэш от ObstacleFeature
-				if (processed_true_sites_for_this_vd_vertex.count(source_idx * 10 + cell->source_category()))
-				{ // Простой способ уникализации
+				if (processed_true_sites_for_this_vd_vertex.contains(source_idx * 10 + cell->source_category()))
+				{
 					current_iter_edge = current_iter_edge->rot_next();
 					continue;
 				}
@@ -283,35 +236,24 @@ VoronoiData ConstructRefined(
 					// Допустим, 0 - точка, 1 - отрезок, 2 - начальная точка, 3 - конечная точка. (ЭТО ПРЕДПОЛОЖЕНИЕ!)
 
 					int category = cell->source_category();
-					const shapes::Segment& original_input_segment = source_info_map[source_idx].original_segment;
+					const Segment& original_input_segment = source_info_map[source_idx].original_segment;
 
-					// ПРОВЕРЬТЕ ЭТИ ЗНАЧЕНИЯ ENUM ИЛИ ИСПОЛЬЗУЙТЕ ИМЕНОВАННЫЕ КОНСТАНТЫ ИЗ BOOST HEADERS!
-					const int cat_segment = SOURCE_CATEGORY_SEGMENT_START_POINT; // ПРЕДПОЛОЖЕНИЕ: boost::polygon::bits::SEGMENT_SOURCE_CATEGORY или аналогичное
+					// constexpr int cat_segment = SOURCE_CATEGORY_SEGMENT_START_POINT; // ПРЕДПОЛОЖЕНИЕ: boost::polygon::bits::SEGMENT_SOURCE_CATEGORY или аналогичное
 					constexpr int cat_start_endpoint = SOURCE_CATEGORY_SEGMENT_START_POINT; // ПРЕДПОЛОЖЕНИЕ: ...bits::START_POINT_SOURCE_CATEGORY
 					constexpr int cat_end_endpoint = SOURCE_CATEGORY_SEGMENT_END_POINT; // ПРЕДПОЛОЖЕНИЕ: ...bits::END_POINT_SOURCE_CATEGORY
-					// const int cat_single_point = X; // Если вы видите эту категорию для конечных точек
 
 					if (cell->incident_edge())
-					{ // Если ячейка для отрезка
+					{
 						feature_o_for_psi = ObstacleFeature(original_input_segment);
 					}
 					else if (category == cat_start_endpoint)
-					{ // Если ячейка для начальной точки отрезка
+					{
 						feature_o_for_psi = ObstacleFeature(original_input_segment.p1);
 					}
 					else if (category == cat_end_endpoint)
-					{ // Если ячейка для конечной точки отрезка
+					{
 						feature_o_for_psi = ObstacleFeature(original_input_segment.p2);
 					}
-					// Обработка SOURCE_CATEGORY_SINGLE_POINT (если она у вас встречается для конечных точек):
-					// else if (category == cat_single_point) {
-					//   // Здесь нужна логика для определения, какая из original_input_segment.p1 или .p2 является сайтом.
-					//   // Это может потребовать анализа геометрии или более глубокого понимания API Boost.
-					//   // Например, можно проверить, какая из точек (p1 или p2) ближе к x_vor_vertex,
-					//   // так как x_vor_vertex должен быть равноудален от всех своих сайтов.
-					//   // Это сложно и может быть неточным без доп. информации.
-					//   // Пока пропустим, если только эти категории не покрывают ваш случай.
-					// }
 
 					if (feature_o_for_psi)
 					{
@@ -341,18 +283,11 @@ VoronoiData ConstructRefined(
 		std::optional<ObstacleFeature> feature_o_cell = std::nullopt;
 		const Segment& original_input_segment_for_cell = source_info_map[source_idx].original_segment;
 
-		// Используйте ЗДЕСЬ РЕАЛЬНЫЕ ЗНАЧЕНИЯ ENUM из вашей версии Boost.Polygon!
-		// Примерные значения (проверьте и исправьте):
-		// namespace bpd = boost::polygon::detail; или boost::polygon::bits;
-		// const int cat_segment = bpd::SEGMENT_SOURCE_CATEGORY; // или аналогичный
+		// const int cat_segment = SEGMENT_SOURCE_CATEGORY; // или аналогичный
 		constexpr int cat_start_endpoint = SOURCE_CATEGORY_SEGMENT_START_POINT; // или аналогичный
 		constexpr int cat_end_endpoint = SOURCE_CATEGORY_SEGMENT_END_POINT; // или аналогичный
 
-		// ЗАМЕНИТЕ ЭТИ ЧИСЛА НА РЕАЛЬНЫЕ КОНСТАНТЫ ENUM ИЗ BOOST!
 		int category_cell = cell.source_category();
-		// const int cat_segment_placeholder = 1;        // ЗАМЕНИТЬ!
-		// const int cat_start_placeholder = 2;      // ЗАМЕНИТЬ!
-		// const int cat_end_placeholder = 3;        // ЗАМЕНИТЬ!
 
 		if (cell.incident_edge())
 		{
@@ -413,7 +348,8 @@ VoronoiData ConstructRefined(
 				}
 			}
 			else
-			{ // Криволинейное ребро (парабола)
+			{
+				// Криволинейное ребро (парабола)
 				// Для параболических ребер свойство выпуклости также сохраняется.
 				// Минимум также будет на одном из концов хорды, которую представляет v_edge->vertex0/1(),
 				// или в точке на параболе, где ее касательная параллельна "эффективной прямой" особенности 'o',
@@ -483,7 +419,7 @@ VoronoiData ConstructRefined(
 		{
 			Point p_curr = start_node_for_face;
 			Point p_next = first_neighbor;
-			std::pair<Point, Point> current_half_edge = { p_curr, p_next };
+			std::pair current_half_edge = { p_curr, p_next };
 
 			if (visited_half_edges.contains(current_half_edge))
 			{
@@ -519,11 +455,12 @@ VoronoiData ConstructRefined(
 				path_tracer_curr = next_node_for_face;
 
 				if (path_tracer_prev == start_node_for_face && path_tracer_curr == first_neighbor)
-				{ // НУЖНО ДОБАВИТЬ ХОТЯ БЫ 1 БЛИЖАЙШУЮ ТОЧКУ
+				{
 					break; // Замкнули цикл, вернулись к первому ребру грани
 				}
 				if (current_cell_polygon.size() > all_vertices_tilde_V_set.size() * 2)
-				{ // Защита от зацикливания
+				{
+					// Защита от зацикливания
 					LOG_WARN("Warning: Face traversal seems to be in an infinite loop.");
 					current_cell_polygon.clear(); // Помечаем как невалидную
 					break;
@@ -551,7 +488,7 @@ VoronoiData ConstructRefined(
 		const auto& cell_poly = data.all_tilde_V_cells[i];
 		if (Contains(start_point_s, cell_poly))
 		{
-			data.s_cell_idx = static_cast<int>(i);
+			data.s_cell_idx = i;
 			s_located = true;
 			break;
 		}
@@ -563,7 +500,7 @@ VoronoiData ConstructRefined(
 		const auto& cell_poly = data.all_tilde_V_cells[i];
 		if (Contains(target_point_t, cell_poly))
 		{
-			data.t_cell_idx = static_cast<int>(i);
+			data.t_cell_idx = i;
 			t_located = true;
 			break;
 		}
@@ -571,12 +508,14 @@ VoronoiData ConstructRefined(
 
 	// Обработка случаев, если точки не найдены (могут быть на ребре или вне области)
 	if (!s_located)
-	{ /* Опционально: логика для s на ребре или вне */
+	{
+		/* Опционально: логика для s на ребре или вне */
 		auto message = std::format("Failed to find any N_s points from START[{}, {}]", start_point_s.x, start_point_s.y);
 		LOG_CRITICAL(message)
 	}
 	if (!t_located)
-	{ /* Опционально: логика для t на ребре или вне */
+	{
+		/* Опционально: логика для t на ребре или вне */
 		auto message = std::format("Failed to find any N_t points from GOAL[{}, {}]", target_point_t.x, target_point_t.y);
 		LOG_CRITICAL(message)
 	}

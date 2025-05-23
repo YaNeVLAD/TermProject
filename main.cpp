@@ -9,7 +9,7 @@
 #include "src/Algorithm/Voronoi/Voronoi.h"
 #include "src/Utility/Logger/Logger.h"
 #include "src/Window/Window.h"
-
+#include <memory>
 // В экранных координатах (Y вниз) результат > 0 означает CW порядок, < 0 - CCW.
 float ComputeSignedArea(const tp::shapes::Polygon& polygon)
 {
@@ -44,7 +44,7 @@ int main()
 	std::vector<Segment> path;
 	bool isBuilding = false;
 
-	tp::GraphType currGraphType = GraphType::G1;
+	auto currGraphType = GraphType::G1;
 
 	Point start = { 100, 500 };
 	Point end = { 1000, 500 };

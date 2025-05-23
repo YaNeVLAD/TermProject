@@ -11,22 +11,17 @@ namespace tp
 {
 struct VoronoiData
 {
-	std::vector<shapes::Segment> refined_edges; // Все ребра $\tilde{\mathcal{V}}$
-	std::vector<shapes::Polygon> all_tilde_V_cells; // ВСЕ внутренние ячейки $T$ диаграммы $\tilde{\mathcal{V}}$
-													// Каждая Polygon - это список вершин ячейки.
-	size_t s_cell_idx; // Индекс ячейки в all_tilde_V_cells, содержащей s (или -1)
-	size_t t_cell_idx; // Индекс ячейки в all_tilde_V_cells, содержащей t (или -1)
+	std::vector<shapes::Segment> refined_edges;
+	std::vector<shapes::Polygon> all_tilde_V_cells;
 
-	// Для удобства G1, можно добавить эти поля, которые заполняются на основе s_cell_idx/t_cell_idx
-	// Либо PathFinder будет их извлекать сам из all_tilde_V_cells.
-	// std::vector<shapes::Point> N_s_vertices;
-	// std::vector<shapes::Point> N_t_vertices;
+	size_t s_cell_idx;
+	size_t t_cell_idx;
 
 	VoronoiData()
 		: s_cell_idx(-1)
 		, t_cell_idx(-1)
 	{
-	} // Конструктор по умолчанию
+	}
 };
 
 class Voronoi
