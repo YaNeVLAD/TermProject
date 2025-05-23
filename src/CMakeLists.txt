@@ -1,6 +1,7 @@
 find_package(Boost 1.88.0 REQUIRED)
+find_package(CGAL CONFIG REQUIRED)
 
-add_executable(Term main.cpp
+add_executable(Term ../main.cpp
         Window/Window.cpp
         Window/Window.h
         Utility/Shapes.hpp
@@ -26,5 +27,6 @@ add_executable(Term main.cpp
 target_compile_features(Term PRIVATE cxx_std_20)
 target_link_libraries(Term PRIVATE SFML::Graphics)
 target_link_libraries(Term PRIVATE Boost::boost)
+target_link_libraries(Term PRIVATE CGAL::CGAL)
 
 target_compile_definitions(Term PRIVATE $<$<CONFIG:Debug>:_DEBUG>)

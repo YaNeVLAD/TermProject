@@ -96,6 +96,11 @@ struct Point
 struct Segment
 {
 	Point p1, p2;
+
+	bool operator==(const Segment& other) const
+	{
+		return p1 == other.p1 && p2 == other.p2;
+	}
 };
 
 struct BorderRect

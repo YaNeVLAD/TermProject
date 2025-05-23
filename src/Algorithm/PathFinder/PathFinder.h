@@ -8,17 +8,24 @@
 #include <vector>
 
 #include "../../Utility/Shapes.hpp"
+#include "../Voronoi/Voronoi.h"
 
 namespace tp
 {
+enum class GraphType
+{
+	G1,
+	G2
+};
+
 class PathFinder
 {
 public:
 	PathFinder(
-		const std::vector<shapes::Segment>& segments,
+		GraphType type,
+		const VoronoiData& voronoi_data,
 		const std::vector<shapes::Polygon>& obstacles,
-		const shapes::Point& start, const shapes::Point& end,
-		const std::vector<shapes::Point>& N_s, const std::vector<shapes::Point>& N_t);
+		const shapes::Point& start, const shapes::Point& end);
 
 	[[nodiscard]] std::vector<shapes::Segment> GetPath() const;
 

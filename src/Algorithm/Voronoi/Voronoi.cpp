@@ -9,11 +9,22 @@
 #include "../../Utility/Logger/Logger.h"
 #include "../Structures/BoostCompat.h"
 
+#include <CGAL/Arr_segment_traits_2.h> // Добавить эту строку для отрезков
+#include <CGAL/Arrangement_2.h> // Добавить эту строку
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/enum.h> // Для CGAL::ON_UNBOUNDED_SIDE и т.п.
+
 #include <format>
 #include <optional>
 
 using namespace tp;
 using namespace tp::shapes;
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef CGAL::Arr_segment_traits_2<K> Traits_2;
+typedef CGAL::Arrangement_2<Traits_2> Arrangement;
+typedef K::Point_2 CGAL_Point;
+typedef K::Segment_2 CGAL_Segment;
 
 struct ObstacleFeature
 {
@@ -144,6 +155,12 @@ VoronoiData ConstructRefined(
 		input_to_boost_segments.emplace_back(point_data(p1.x, p1.y), point_data(p2.x, p2.y));
 		source_info_map.emplace_back(false, Segment{ p1, p2 }); // is_obstacle_related = false
 	};
+
+	Segment leftTop = { left, top };
+	Segment rightTop = { right, top };
+	Segment leftBottom = { left, bottom };
+	Segment rightBottom = { right, bottom };
+
 	add_border_segment({ left, top }, { right, top });
 	add_border_segment({ right, top }, { right, bottom });
 	add_border_segment({ right, bottom }, { left, bottom });
@@ -525,24 +542,28 @@ VoronoiData ConstructRefined(
 		}
 	}
 
+	data.all_tilde_V_cells = found_cells_T;
+
 	// Шаг 4: Локализация точек s и t в найденных ячейках
 	bool s_located = false;
-	for (const auto& cell_poly : found_cells_T)
+	for (size_t i = 0; i < data.all_tilde_V_cells.size(); ++i)
 	{
+		const auto& cell_poly = data.all_tilde_V_cells[i];
 		if (Contains(start_point_s, cell_poly))
 		{
-			data.N_s = cell_poly; // Polygon это std::vector<Point>
+			data.s_cell_idx = static_cast<int>(i);
 			s_located = true;
 			break;
 		}
 	}
 
 	bool t_located = false;
-	for (const auto& cell_poly : found_cells_T)
+	for (size_t i = 0; i < data.all_tilde_V_cells.size(); ++i)
 	{
+		const auto& cell_poly = data.all_tilde_V_cells[i];
 		if (Contains(target_point_t, cell_poly))
 		{
-			data.N_t = cell_poly;
+			data.t_cell_idx = static_cast<int>(i);
 			t_located = true;
 			break;
 		}

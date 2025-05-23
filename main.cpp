@@ -4,14 +4,14 @@
 #include <iostream>
 #include <vector>
 
-#include "Algorithm/HaloGenerator/HaloGenerator.h"
-#include "Algorithm/PathFinder/PathFinder.h"
-#include "Algorithm/Voronoi/Voronoi.h"
-#include "Utility/Logger/Logger.h"
-#include "Window/Window.h"
+#include "src/Algorithm/HaloGenerator/HaloGenerator.h"
+#include "src/Algorithm/PathFinder/PathFinder.h"
+#include "src/Algorithm/Voronoi/Voronoi.h"
+#include "src/Utility/Logger/Logger.h"
+#include "src/Window/Window.h"
 
 // В экранных координатах (Y вниз) результат > 0 означает CW порядок, < 0 - CCW.
-float computeSignedArea(const tp::shapes::Polygon& polygon)
+float ComputeSignedArea(const tp::shapes::Polygon& polygon)
 {
 	float area = 0.0f;
 	size_t n = polygon.size();
@@ -44,6 +44,8 @@ int main()
 	std::vector<Segment> path;
 	bool isBuilding = false;
 
+	tp::GraphType currGraphType = GraphType::G1;
+
 	Point start = { 100, 500 };
 	Point end = { 1000, 500 };
 
@@ -68,7 +70,7 @@ int main()
 			Voronoi vd(window.GetBounds());
 			voronoiData = vd.Generate(obstacles, halos, start, end);
 
-			PathFinder pathFinder(voronoiData.refined_edges, obstacles, start, end, voronoiData.N_s, voronoiData.N_t);
+			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
 		}
 		if (button == 3)
@@ -77,7 +79,7 @@ int main()
 			Voronoi vd(window.GetBounds());
 			voronoiData = vd.Generate(obstacles, halos, start, end);
 
-			PathFinder pathFinder(voronoiData.refined_edges, obstacles, start, end, voronoiData.N_s, voronoiData.N_t);
+			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
 		}
 		if (button == 0)
@@ -106,7 +108,7 @@ int main()
 				Polygon obstacleForHalo = currentObstacle;
 
 				// На вход всегда подаём CCW полигон
-				if (float area = computeSignedArea(obstacleForHalo); area > DBL_EPSILON)
+				if (float area = ComputeSignedArea(obstacleForHalo); area > DBL_EPSILON)
 				{
 					LOG_DEBUG(std::format("Input obstacle area: {} (CW), reversing to CCW", area));
 					std::ranges::reverse(obstacleForHalo);
@@ -140,7 +142,7 @@ int main()
 		if (key == keyboard::Key::Space)
 		{
 			// !!! PATH FINDING START !!!
-			PathFinder pathFinder(voronoiData.refined_edges, obstacles, start, end, voronoiData.N_s, voronoiData.N_t);
+			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
 			// !!! PATH FINDING END !!!
 		}
@@ -150,6 +152,15 @@ int main()
 			Voronoi vd(window.GetBounds());
 			voronoiData = vd.Generate(obstacles, halos, start, end);
 			// !!! VORONOI GENERATION END !!!
+		}
+		if (key == keyboard::Key::F1)
+		{
+			currGraphType = currGraphType == GraphType::G1 ? GraphType::G2 : GraphType::G1;
+
+			LOG_DEBUG(std::format("Current graph type: {}", (int)currGraphType));
+
+			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
+			path = pathFinder.GetPath();
 		}
 	});
 
