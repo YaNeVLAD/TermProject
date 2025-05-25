@@ -5,10 +5,12 @@
 #ifndef BOOST_COMPAT_H
 #define BOOST_COMPAT_H
 
+#include <boost/geometry/geometries/concepts/point_concept.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/polygon/point_data.hpp>
 #include <boost/polygon/segment_concept.hpp>
+#include <boost/polygon/voronoi_diagram.hpp>
 #include <utility>
 
 // Можно заменить на функции-мапперы shapes::Polygon -> boost::polygon
@@ -43,6 +45,16 @@ using Graph = boost::adjacency_list<
 	boost::property<boost::edge_weight_t, double>>;
 
 using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
+
+using Voronoi = boost::polygon::voronoi_diagram<double>;
+
+using VoronoiVertex = Voronoi::vertex_type;
+using VoronoiEdge = Voronoi::edge_type;
+
+inline shapes::Point VertexToPoint(const VoronoiVertex& vertex)
+{
+	return { static_cast<float>(vertex.x()), static_cast<float>(vertex.y()) };
+}
 
 class DijkstraShortestPath
 {

@@ -35,7 +35,6 @@ public:
 
 	[[nodiscard]] VoronoiData Generate(
 		const std::vector<shapes::Polygon>& polygons,
-		const std::vector<shapes::Polygon>& halos,
 		const shapes::Point& start_point_s,
 		const shapes::Point& target_point_t);
 

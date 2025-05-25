@@ -343,16 +343,14 @@ std::vector<Point> FindPath(
 	using namespace boost_compat;
 
 	std::vector<Point> N_s_for_G1;
-	if (voronoi_data.s_cell_idx != -1 && static_cast<size_t>(voronoi_data.s_cell_idx) < voronoi_data.all_tilde_V_cells.size())
+	if (voronoi_data.s_cell_idx < voronoi_data.all_tilde_V_cells.size())
 	{
-		// Проверяем границы
 		N_s_for_G1 = voronoi_data.all_tilde_V_cells[voronoi_data.s_cell_idx];
 	}
 
 	std::vector<Point> N_t_for_G1;
-	if (voronoi_data.t_cell_idx != -1 && static_cast<size_t>(voronoi_data.t_cell_idx) < voronoi_data.all_tilde_V_cells.size())
+	if (voronoi_data.t_cell_idx < voronoi_data.all_tilde_V_cells.size())
 	{
-		// Проверяем границы
 		N_t_for_G1 = voronoi_data.all_tilde_V_cells[voronoi_data.t_cell_idx];
 	}
 	if (type == GraphType::G1)

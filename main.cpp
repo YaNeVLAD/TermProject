@@ -38,7 +38,6 @@ int main()
 	using namespace tp::halos;
 
 	std::vector<Point> currentObstacle;
-	std::vector<Polygon> halos;
 	std::vector<Polygon> obstacles;
 	VoronoiData voronoiData;
 	std::vector<Segment> path;
@@ -50,8 +49,6 @@ int main()
 	Point end = { 1000, 500 };
 
 	Window window(1024, 720, "Term");
-
-	HaloGenerator hg(10.f, 4);
 
 	auto edgeColor = Color{ 0x246AF3FF };
 	auto pathColor = Color::Green;
@@ -68,7 +65,7 @@ int main()
 		{
 			start = clickPos;
 			Voronoi vd(window.GetBounds());
-			voronoiData = vd.Generate(obstacles, halos, start, end);
+			voronoiData = vd.Generate(obstacles, start, end);
 
 			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
@@ -77,7 +74,7 @@ int main()
 		{
 			end = clickPos;
 			Voronoi vd(window.GetBounds());
-			voronoiData = vd.Generate(obstacles, halos, start, end);
+			voronoiData = vd.Generate(obstacles, start, end);
 
 			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
@@ -97,33 +94,16 @@ int main()
 		{
 			if (!currentObstacle.empty())
 			{
-				// !!! HALO GENERATION START !!!
 				if (currentObstacle.size() < 3)
 				{
-					return;
+					return currentObstacle.clear();
 				}
 				obstacles.push_back(currentObstacle);
 				LOG_DEBUG(std::format("Obstacle created with {} points", currentObstacle.size()));
 
-				Polygon obstacleForHalo = currentObstacle;
-
-				// На вход всегда подаём CCW полигон
-				if (float area = ComputeSignedArea(obstacleForHalo); area > DBL_EPSILON)
-				{
-					LOG_DEBUG(std::format("Input obstacle area: {} (CW), reversing to CCW", area));
-					std::ranges::reverse(obstacleForHalo);
-				}
-
-				// Генерируем ореол (ожидаем CCW результат)
-				Polygon newHalo = hg.Generate(obstacleForHalo);
-				LOG_DEBUG(std::format("Generated halo with {} points", newHalo.size()));
-
-				halos.push_back(newHalo);
-				// !!! HALO GENERATION END !!!
-
 				// !!! VORONOI GENERATION START !!!
 				Voronoi vd(window.GetBounds());
-				voronoiData = vd.Generate(obstacles, halos, start, end);
+				voronoiData = vd.Generate(obstacles, start, end);
 
 				// !!! VORONOI GENERATION END !!!
 			}
@@ -150,7 +130,7 @@ int main()
 		{
 			// !!! VORONOI GENERATION START !!!
 			Voronoi vd(window.GetBounds());
-			voronoiData = vd.Generate(obstacles, halos, start, end);
+			voronoiData = vd.Generate(obstacles, start, end);
 			// !!! VORONOI GENERATION END !!!
 		}
 		if (key == keyboard::Key::F1)
@@ -179,11 +159,6 @@ int main()
 		for (const auto& seg : path)
 		{
 			window.Draw(seg, pathColor);
-		}
-
-		for (const auto& halo : halos)
-		{
-			window.Draw(halo, haloColor, false);
 		}
 
 		for (const auto& obstacle : obstacles)

@@ -65,7 +65,7 @@ struct Point
 {
 	float x = 0, y = 0;
 
-	bool operator==(const Point& other) const = default;
+	auto operator<=>(const Point&) const = default;
 
 	bool operator<(const Point& other) const
 	{
@@ -91,16 +91,23 @@ struct Point
 	{
 		return Point{ x + vec.x, y + vec.y };
 	}
+
+	Point Midpoint(const Point& other) const
+	{
+		return Point{ (x + other.x) / 2.0f, (y + other.y) / 2.0f };
+	}
+
+	explicit operator Vec2D() const
+	{
+		return Vec2D{ x, y };
+	}
 };
 
 struct Segment
 {
 	Point p1, p2;
 
-	bool operator==(const Segment& other) const
-	{
-		return p1 == other.p1 && p2 == other.p2;
-	}
+	auto operator<=>(const Segment&) const = default;
 };
 
 struct BorderRect
