@@ -28,8 +28,6 @@ struct ObstacleFeature
 	Type type;
 	Point vertex_site; // Значимо, если type == VERTEX
 	Segment segment_site; // Значимо, если type == SEGMENT
-	// Можно добавить указатель на исходный полигон для доп. информации
-	// const shapes::Polygon* source_polygon;
 
 	explicit ObstacleFeature(Point vertex)
 		: type(Type::VERTEX)
@@ -80,7 +78,7 @@ struct ObstacleFeature
 
 struct BoostInputSourceInfo
 {
-	bool is_obstacle_related; // true, если это сегмент реального препятствия, false - если рамка
+	bool is_obstacle_related;
 	Segment original_segment;
 
 	explicit BoostInputSourceInfo(bool is_obs, Segment seg = {})
@@ -124,17 +122,17 @@ std::optional<Point> IntersectLines(const Point& p1, const Point& p2, const Poin
 
 void DiscretizeRecursive(
 	const Point& focus,
-	const Point& directrix_l_p1, const Point& directrix_l_p2, // Точки, определяющие прямую-директрису
-	const Point& arc_p0, const Point& arc_p2, // Текущие конечные точки дуги
-	int current_depth, // Текущая глубина рекурсии
+	const Point& directrix_l_p1, const Point& directrix_l_p2,
+	const Point& arc_p0, const Point& arc_p2,
+	size_t current_depth,
 	std::vector<Point>& points_on_arc_accumulator) // Сюда добавляются точки (arc_p0 уже должна быть там)
 {
-	if (current_depth <= 0 || (arc_p0 == arc_p2))
+	if (current_depth == 0 || arc_p0 == arc_p2)
 	{ // Базовый случай рекурсии или вырожденная дуга
-		if (points_on_arc_accumulator.empty() || !(points_on_arc_accumulator.back() == arc_p2))
+		if (points_on_arc_accumulator.empty() || points_on_arc_accumulator.back() != arc_p2)
 		{ // Проверка на дубликат
-			if (!(arc_p0 == arc_p2 && !points_on_arc_accumulator.empty() && points_on_arc_accumulator.back() == arc_p0))
-			{ // Не добавляем p2 если p0=p2 и p0 уже есть
+			if (arc_p0 != arc_p2 && !points_on_arc_accumulator.empty() && points_on_arc_accumulator.back() == arc_p0)
+			{
 				points_on_arc_accumulator.push_back(arc_p2);
 			}
 		}
@@ -239,25 +237,24 @@ bool Contains(const Point& point, const Polygon& polygon)
 using namespace boost::polygon;
 std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 	const voronoi_edge<double>& curved_boost_edge,
-	// Для доступа к original_segment, из которого получаем фокус/директрису:
 	const std::vector<BoostInputSourceInfo>& source_info_map,
-	int num_segments_hint // Желаемое количество сегментов для аппроксимации дуги
-)
+	size_t num_segments_hint)
 {
 	std::vector<Segment> resulting_segments;
 
-	if (!curved_boost_edge.is_curved() || !curved_boost_edge.vertex0() || !curved_boost_edge.vertex1())
+	if (curved_boost_edge.is_linear() || !curved_boost_edge.vertex0() || !curved_boost_edge.vertex1())
 	{
 		if (curved_boost_edge.vertex0() && curved_boost_edge.vertex1())
 		{ // Если это просто прямое ребро
-			resulting_segments.push_back({ Point(curved_boost_edge.vertex0()->x(), curved_boost_edge.vertex0()->y()),
-				Point(curved_boost_edge.vertex1()->x(), curved_boost_edge.vertex1()->y()) });
+			Point u = boost_compat::VertexToPoint(*curved_boost_edge.vertex0());
+			Point v = boost_compat::VertexToPoint(*curved_boost_edge.vertex1());
+			resulting_segments.emplace_back(u, v);
 		}
 		return resulting_segments;
 	}
 
-	Point p_arc_start(curved_boost_edge.vertex0()->x(), curved_boost_edge.vertex0()->y());
-	Point p_arc_end(curved_boost_edge.vertex1()->x(), curved_boost_edge.vertex1()->y());
+	Point p_arc_start = boost_compat::VertexToPoint(*curved_boost_edge.vertex0());
+	Point p_arc_end = boost_compat::VertexToPoint(*curved_boost_edge.vertex1());
 
 	if (p_arc_start == p_arc_end)
 	{ // Вырожденная дуга
@@ -271,16 +268,16 @@ std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 	bool directrix_identified = false;
 
 	// Сайты, определяющие ребро
-	const voronoi_cell<double>* cell1 = curved_boost_edge.cell();
-	const voronoi_cell<double>* cell2 = curved_boost_edge.twin()->cell();
+	auto cell1 = curved_boost_edge.cell();
+	auto cell2 = curved_boost_edge.twin()->cell();
 
-	std::array<const voronoi_cell<double>*, 2> cells_for_sites = { cell1, cell2 };
+	std::array<decltype(cell1), 2> cells_for_sites = { cell1, cell2 };
 	for (const auto* current_b_cell : cells_for_sites)
 	{
 		if (!current_b_cell)
 			continue;
 
-		unsigned int src_idx = current_b_cell->source_index();
+		size_t src_idx = current_b_cell->source_index();
 		if (src_idx >= source_info_map.size())
 		{
 			LOG_ERROR(std::format("Discretize: source_idx {} out of bounds for source_info_map (size {}).", src_idx, source_info_map.size()));
@@ -288,10 +285,9 @@ std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 		}
 
 		int category = current_b_cell->source_category();
-		bool current_cell_is_segment_site = current_b_cell->contains_segment();
 		const Segment& original_input_for_site = source_info_map[src_idx].original_segment;
 
-		if (current_cell_is_segment_site)
+		if (current_b_cell->contains_segment())
 		{
 			if (!directrix_identified)
 			{
@@ -308,17 +304,13 @@ std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 		{ // current_cell_is_segment_site == false, значит сайт - точка (фокус)
 			if (!focus_identified)
 			{
-				// Используем ваши константы, но они должны быть корректными!
-				// Предполагаем, что SOURCE_CATEGORY_SEGMENT_START_POINT и _END_POINT
-				// это категории для точечных сайтов, которые являются концами других сегментов.
-				// А если точечный сайт был просто точкой (возможно, введенной как вырожденный сегмент)?
 				if (category == SOURCE_CATEGORY_SEGMENT_START_POINT)
-				{ // Замените на актуальные enum из Boost
+				{
 					focus_F = original_input_for_site.p2;
 					focus_identified = true;
 				}
 				else if (category == SOURCE_CATEGORY_SEGMENT_END_POINT)
-				{ // Замените на актуальные enum из Boost
+				{
 					focus_F = original_input_for_site.p1;
 					focus_identified = true;
 				}
@@ -358,13 +350,13 @@ std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 	std::vector<Point> points_on_arc_result;
 	points_on_arc_result.push_back(p_arc_start); // Начинаем с первой точки
 
-	int depth = 0;
+	size_t depth = 0;
 	if (num_segments_hint > 1)
 	{
 		// Глубина рекурсии определяет количество точек $2^{depth}$.
 		// Если нужно num_segments_hint отрезков, нужно num_segments_hint+1 точек.
 		// depth = ceil(log2(num_segments_hint))
-		depth = static_cast<int>(std::ceil(std::log2(static_cast<double>(num_segments_hint))));
+		depth = static_cast<size_t>(std::ceil(std::log2(static_cast<double>(num_segments_hint))));
 	}
 	else if (num_segments_hint == 1)
 	{
@@ -382,7 +374,7 @@ std::vector<Segment> DiscretizeParabolicVoronoiEdge(
 	}
 	else
 	{ // depth = 0, значит только конечная точка
-		if (!(p_arc_start == p_arc_end))
+		if (p_arc_start != p_arc_end)
 			points_on_arc_result.push_back(p_arc_end);
 	}
 
@@ -495,7 +487,7 @@ VoronoiData ConstructRefined(
 
 		if (edge.is_curved())
 		{
-			int desired_segments_for_parabola = 2; // Сделайте это настраиваемым параметром
+			size_t desired_segments_for_parabola = 2; // Сделайте это настраиваемым параметром
 			std::vector<Segment> discretized_segments = DiscretizeParabolicVoronoiEdge(
 				edge, source_info_map, desired_segments_for_parabola);
 
@@ -523,7 +515,7 @@ VoronoiData ConstructRefined(
 		if (!incident_edge)
 			continue;
 
-		std::set<unsigned int> // Уникальные source_indices, уже обработанные для этой вершины VD
+		std::set<size_t> // Уникальные source_indices, уже обработанные для этой вершины VD
 			processed_true_sites_for_this_vd_vertex; // Чтобы избежать дублирования из-за twin()
 
 		const voronoi_edge<double>* current_iter_edge = incident_edge;
@@ -531,7 +523,7 @@ VoronoiData ConstructRefined(
 		{
 			if (const auto* cell = current_iter_edge->cell())
 			{
-				unsigned int source_idx = cell->source_index();
+				size_t source_idx = cell->source_index();
 
 				// Проверяем, не обработали ли мы уже этот сайт для данной вершины VD
 				// (один сайт может быть доступен через несколько полуребер вокруг вершины)
@@ -549,7 +541,6 @@ VoronoiData ConstructRefined(
 					int category = cell->source_category();
 					const Segment& original_input_segment = source_info_map[source_idx].original_segment;
 
-					// const bool cat_segment = cell->incident_edge();
 					constexpr int cat_start_endpoint = SOURCE_CATEGORY_SEGMENT_START_POINT;
 					constexpr int cat_end_endpoint = SOURCE_CATEGORY_SEGMENT_END_POINT;
 
@@ -582,7 +573,7 @@ VoronoiData ConstructRefined(
 	//    Итерируем по ячейкам, затем по их первичным ребрам.
 	for (const auto& cell : vd.cells())
 	{
-		unsigned int source_idx = cell.source_index();
+		size_t source_idx = cell.source_index();
 
 		// Пропускаем ячейки, не связанные с препятствиями
 		if (source_idx >= source_info_map.size() || !source_info_map[source_idx].is_obstacle_related)
@@ -594,21 +585,20 @@ VoronoiData ConstructRefined(
 		std::optional<ObstacleFeature> feature_o_cell = std::nullopt;
 		const Segment& original_input_segment_for_cell = source_info_map[source_idx].original_segment;
 
-		// const int cat_segment = SOURCE_CATEGORY_SEGMENT_START_POINT; // или аналогичный
 		constexpr int cat_start_endpoint = SOURCE_CATEGORY_SEGMENT_START_POINT; // или аналогичный
 		constexpr int cat_end_endpoint = SOURCE_CATEGORY_SEGMENT_END_POINT; // или аналогичный
 
-		int category_cell = cell.source_category();
+		int cell_category = cell.source_category();
 
 		if (cell.contains_segment())
 		{
 			feature_o_cell = ObstacleFeature(original_input_segment_for_cell);
 		}
-		else if (category_cell == cat_start_endpoint)
+		else if (cell_category == cat_start_endpoint)
 		{
 			feature_o_cell = ObstacleFeature(original_input_segment_for_cell.p2);
 		}
-		else if (category_cell == cat_end_endpoint)
+		else if (cell_category == cat_end_endpoint)
 		{
 			feature_o_cell = ObstacleFeature(original_input_segment_for_cell.p1);
 		}
@@ -619,16 +609,16 @@ VoronoiData ConstructRefined(
 		}
 
 		// Итерируем по первичным инцидентным ребрам этой ячейки 'V(o)'
-		const voronoi_edge<double>* v_edge = cell.incident_edge();
+		auto v_edge = cell.incident_edge();
 		if (!v_edge)
 			continue;
 
-		const voronoi_edge<double>* start_iter_edge = v_edge;
+		auto start_iter_edge = v_edge;
 		do
 		{
 			// Обрабатываем только первичные, конечные ребра.
 			// is_secondary() может помочь отфильтровать внутренние ребра для отрезков-сайтов, если они есть.
-			if (!v_edge->is_primary() || !v_edge->vertex0() || !v_edge->vertex1() /* || v_edge->is_secondary() */)
+			if (v_edge->is_secondary() || !v_edge->vertex0() || !v_edge->vertex1())
 			{
 				v_edge = v_edge->next();
 				continue;
@@ -670,20 +660,40 @@ VoronoiData ConstructRefined(
 				// Более точный метод потребовал бы итерации по дискретизированным точкам параболы,
 				// которые Boost использует для отрисовки, или аналитического решения.
 				// Пока используем ту же эвристику конечных точек.
-				float dist_pa_to_o = distance_point_to_feature(p_a, *feature_o_cell);
-				float dist_pb_to_o = distance_point_to_feature(p_b, *feature_o_cell);
 
-				if (dist_pa_to_o <= dist_pb_to_o)
+				size_t desired_segments_for_parabola = 2; // Сделайте это настраиваемым параметром
+				std::vector<Segment> discretized_segments = DiscretizeParabolicVoronoiEdge(
+					*v_edge, source_info_map, desired_segments_for_parabola);
+
+				for (const auto& [p1, p2] : discretized_segments)
 				{
-					x_star = p_a;
+					float dist_pa_to_o = distance_point_to_feature(p1, *feature_o_cell);
+					float dist_pb_to_o = distance_point_to_feature(p2, *feature_o_cell);
+
+					if (dist_pa_to_o <= dist_pb_to_o)
+					{
+						x_star = p_a;
+					}
+					else
+					{
+						x_star = p_b;
+					}
 				}
-				else
-				{
-					x_star = p_b;
-				}
-				// Примечание: для более точного результата на кривых ребрах, если Boost предоставляет
-				// точки дискретизации для v_edge (например, через какой-либо метод вроде v_edge->discretize(...)),
-				// следовало бы итерировать по этим точкам и найти среди них ту, что минимизирует расстояние до feature_o_cell.
+
+				// float dist_pa_to_o = distance_point_to_feature(p_a, *feature_o_cell);
+				// float dist_pb_to_o = distance_point_to_feature(p_b, *feature_o_cell);
+
+				// if (dist_pa_to_o <= dist_pb_to_o)
+				//{
+				//	x_star = p_a;
+				// }
+				// else
+				//{
+				//	x_star = p_b;
+				// }
+				//  Примечание: для более точного результата на кривых ребрах, если Boost предоставляет
+				//  точки дискретизации для v_edge (например, через какой-либо метод вроде v_edge->discretize(...)),
+				//  следовало бы итерировать по этим точкам и найти среди них ту, что минимизирует расстояние до feature_o_cell.
 			}
 
 			Point psi_o_x_star = feature_o_cell->getPsi(x_star);
@@ -821,13 +831,13 @@ VoronoiData ConstructRefined(
 	if (!s_located)
 	{
 		/* Опционально: логика для s на ребре или вне */
-		auto message = std::format("Failed to find any N_s points from START[{}, {}]", start_point_s.x, start_point_s.y);
+		static auto message = std::format("Failed to find any N_s points from START[{}, {}]", start_point_s.x, start_point_s.y);
 		LOG_CRITICAL(message)
 	}
 	if (!t_located)
 	{
 		/* Опционально: логика для t на ребре или вне */
-		auto message = std::format("Failed to find any N_t points from GOAL[{}, {}]", target_point_t.x, target_point_t.y);
+		static auto message = std::format("Failed to find any N_t points from GOAL[{}, {}]", target_point_t.x, target_point_t.y);
 		LOG_CRITICAL(message)
 	}
 

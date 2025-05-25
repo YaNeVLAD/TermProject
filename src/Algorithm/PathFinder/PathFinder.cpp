@@ -8,6 +8,7 @@
 #include "../Structures/BoostCompat.h"
 
 using namespace tp;
+using namespace tp::math;
 using namespace tp::shapes;
 
 namespace
@@ -15,8 +16,6 @@ namespace
 double CalculateEdgeCost(const Point& p1, const Point& p2,
 	const std::vector<Polygon>& obstacles)
 {
-	using namespace tp::shapes;
-	using namespace tp::math;
 	float segment_length = Distance(p1, p2);
 	if (segment_length < FLT_EPSILON)
 	{
@@ -35,10 +34,12 @@ double CalculateEdgeCost(const Point& p1, const Point& p2,
 		{
 			if (polygon.empty())
 				continue;
-			for (size_t i = 0; i < polygon.size(); ++i)
+			for (size_t i = 0; i < polygon.size() - 1; ++i)
 			{
-				const auto& v1 = polygon[i];
-				const auto& v2 = polygon[(i + 1) % polygon.size()];
+				size_t curr = i;
+				size_t next = i + 1;
+				const auto& v1 = polygon[curr];
+				const auto& v2 = polygon[next];
 				float d_sq = DistanceToSegmentSquared(p, v1, v2);
 				if (d_sq < min_dist_sq)
 				{
