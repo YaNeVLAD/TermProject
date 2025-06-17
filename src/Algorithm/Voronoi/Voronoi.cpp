@@ -155,7 +155,7 @@ void PrepareBoostInputs(
 
 	auto add_border_segment = [&](Point p1, Point p2) {
 		out_boost_segments.emplace_back(point_data(p1.x, p1.y), point_data(p2.x, p2.y));
-		out_source_info_map.emplace_back(false, Segment{ p1, p2 }); // is_obstacle_related = false
+		out_source_info_map.emplace_back(true, Segment{ p1, p2 }); // is_obstacle_related = false
 	};
 
 	add_border_segment({ left, top }, { right, top });
@@ -234,7 +234,7 @@ std::vector<Edge> GenerateTildeVEdges(
 	}
 
 // 2. Ребра типа (i): x * psi_o(x)
-#if 0
+#if 1
 	for (const auto& boost_v_ref : vd.vertices())
 	{
 		Point x_vor_vertex(boost_v_ref.x(), boost_v_ref.y());
@@ -350,7 +350,7 @@ bool clip_infinite_voronoi_edge(
 	const voronoi_diagram<double>::edge_type* edge,
 	std::vector<Point>& clipped_points,
 	const bg::model::box<bg::model::d2::point_xy<double>>& clipping_box,
-	const std::vector<BoostInputSourceInfo>& source_info_map) // Добавленный аргумент
+	const std::vector<BoostInputSourceInfo>& source_info_map)
 {
 	return false;
 }
@@ -368,7 +368,6 @@ std::vector<Polygon> ReconstructTildeVTopology(
 {
 	std::vector<Polygon> result_polygons;
 
-	// Итерируем по всем ячейкам в исходной диаграмме Вороного Boost.Polygon
 	for (auto it = vd.cells().begin();
 		it != vd.cells().end(); ++it)
 	{
@@ -376,12 +375,11 @@ std::vector<Polygon> ReconstructTildeVTopology(
 
 		const auto* edge = cell.incident_edge();
 		if (!edge)
-			continue; // Пустая ячейка или некорректная
+			continue;
 
 		std::vector<Point> current_cell_points;
 		std::vector<Point> temp_edge_points;
 
-		// Обход рёбер вокруг ячейки в counter-clockwise (CCW) порядке
 		do
 		{
 			temp_edge_points.clear();
@@ -390,7 +388,6 @@ std::vector<Polygon> ReconstructTildeVTopology(
 			{
 				if (edge->is_finite())
 				{
-					// Конечное линейное ребро
 					if (edge->vertex0() && edge->vertex1())
 					{
 						temp_edge_points.push_back(boost_compat::VertexToPoint(*edge->vertex0()));
@@ -409,7 +406,6 @@ std::vector<Polygon> ReconstructTildeVTopology(
 			}
 			else if (edge->is_curved())
 			{
-				// Параболическое ребро - требуется дискретизация
 				auto temp = DiscretizeParabolicVoronoiEdge(
 					*edge, source_info_map, num_segments_parabola);
 
@@ -420,7 +416,6 @@ std::vector<Polygon> ReconstructTildeVTopology(
 				}
 			}
 
-			// Добавляем точки ребра в список точек текущей ячейки
 			if (!temp_edge_points.empty())
 			{
 				if (current_cell_points.empty())
@@ -429,8 +424,6 @@ std::vector<Polygon> ReconstructTildeVTopology(
 				}
 				else
 				{
-					// Избегаем дублирования первой точки, если она совпадает с последней
-					// Это важно для правильного формирования контура полигона
 					if (current_cell_points.back() == temp_edge_points.front())
 					{
 						current_cell_points.insert(current_cell_points.end(), temp_edge_points.begin() + 1, temp_edge_points.end());
@@ -445,10 +438,8 @@ std::vector<Polygon> ReconstructTildeVTopology(
 			edge = edge->next();
 		} while (edge != cell.incident_edge());
 
-		// После сбора всех точек, формируем Polygon
 		if (current_cell_points.size() >= 3)
-		{ // Полигон должен иметь минимум 3 точки
-			// Проверяем и замыкаем полигон, если первая и последняя точки не совпадают
+		{
 			if (!current_cell_points.empty() && current_cell_points.front() != current_cell_points.back())
 			{
 				current_cell_points.push_back(current_cell_points.front());
@@ -494,11 +485,11 @@ VoronoiData ConstructRefined(
 
 	for (size_t i = 0; i < data.all_tilde_V_cells.size(); ++i)
 	{
-		if (Contains(start_point_s, data.all_tilde_V_cells[i]))
+		if (math::Contains(start_point_s, data.all_tilde_V_cells[i]))
 		{
 			data.s_cell_idx = i;
 		}
-		if (Contains(target_point_t, data.all_tilde_V_cells[i]))
+		if (math::Contains(target_point_t, data.all_tilde_V_cells[i]))
 		{
 			data.t_cell_idx = i;
 		}

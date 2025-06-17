@@ -62,7 +62,7 @@ struct Vec2D
 		return Vec2D{ x - rhs.x, y - rhs.y };
 	}
 
-	Vec2D operator*(const float& scale)
+	Vec2D operator*(const float& scale) const
 	{
 		return Scale(scale);
 	}
@@ -74,29 +74,29 @@ struct Point
 
 	auto operator<=>(const Point&) const = default;
 
-	bool operator<(const Point& other) const
-	{
-		if (x != other.x)
-		{
-			return x < other.x;
-		}
-
-		return y < other.y;
-	}
-
 	Vec2D operator-(const Point& other) const
 	{
 		return Vec2D{ x - other.x, y - other.y };
 	}
 
-	Vec2D operator+(const Point& other) const
-	{
-		return Vec2D{ x + other.x, y + other.y };
-	}
-
 	Point operator+(const Vec2D& vec) const
 	{
 		return Point{ x + vec.x, y + vec.y };
+	}
+
+	Point operator+(const Point& other) const
+	{
+		return Point{ x + other.x, y + other.y };
+	}
+
+	Point operator*(const Vec2D& vec) const
+	{
+		return { x * vec.x, y * vec.y };
+	}
+
+	Point operator*(float scale) const
+	{
+		return Point{ x * scale, y * scale };
 	}
 
 	Point Midpoint(const Point& other) const
@@ -109,6 +109,11 @@ struct Point
 		return Vec2D{ x, y };
 	}
 };
+
+inline Point operator*(float scale, const Point& p)
+{
+	return p * scale; // Call the member operator
+}
 
 struct Segment
 {

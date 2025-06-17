@@ -110,6 +110,195 @@ bool IsAnyContains(const Point& point, const std::vector<Polygon>& obstacles)
 	return contains;
 }
 
+double CalculatePathCost(const std::vector<Point>& path, const std::vector<Polygon>& obstacles)
+{
+	double total_cost = 0.0;
+	if (path.size() < 2)
+		return 0.0;
+
+	for (size_t i = 0; i < path.size() - 1; ++i)
+	{
+		total_cost += CalculateEdgeCost(path[i], path[i + 1], obstacles); // Reuse your existing cost function
+	}
+	return total_cost;
+}
+
+// Function to calculate clearance along a Bezier curve (sampled)
+float GetClearanceAlongBezier(const Point& p0, const Point& p1, const Point& p2, const std::vector<Polygon>& obstacles, int num_samples = 20)
+{
+	float min_clearance = std::numeric_limits<float>::max();
+
+	for (int i = 0; i <= num_samples; ++i)
+	{
+		float t = static_cast<float>(i) / static_cast<float>(num_samples);
+		// Quadratic Bezier: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+		auto sample_vec = (1.0f - t) * (1.0f - t) * p0 + 2.0f * (1.0f - t) * t * p1 + t * t * p2;
+		Point sample_point = { sample_vec.x, sample_vec.y };
+
+		float current_clearance = std::numeric_limits<float>::max();
+		if (obstacles.empty())
+		{
+			return std::sqrt(std::numeric_limits<float>::max()); // Or some large value
+		}
+
+		for (const auto& polygon : obstacles)
+		{
+			if (polygon.empty())
+				continue;
+			for (size_t j = 0; j < polygon.size() - 1; ++j)
+			{
+				size_t curr = j;
+				size_t next = j + 1;
+				const auto& v1 = polygon[curr];
+				const auto& v2 = polygon[next];
+				float d_sq = DistanceToSegmentSquared(sample_point, v1, v2);
+				current_clearance = std::min(current_clearance, std::sqrt(d_sq));
+			}
+			// Also check distance to vertices of the polygon
+			for (const auto& v : polygon)
+			{
+				current_clearance = std::min(current_clearance, Distance(sample_point, v));
+			}
+		}
+		min_clearance = std::min(min_clearance, current_clearance);
+
+		// Early exit if collision detected or clearance is too low
+		if (min_clearance < FLT_EPSILON)
+			return FLT_EPSILON;
+	}
+	return min_clearance;
+}
+
+// Function to check if a Bezier curve intersects any obstacle
+bool IsBezierColliding(const Point& p0, const Point& p1, const Point& p2, const std::vector<Polygon>& obstacles, int num_samples = 20)
+{
+	// Simplified collision check: sample points and check if any are inside an obstacle or too close
+	// For robust collision, you'd need more sophisticated methods (e.g., using AABB or OBB of the curve segment, or
+	// a sweep test, or direct curve-polygon intersection tests).
+	for (int i = 0; i <= num_samples; ++i)
+	{
+		float t = static_cast<float>(i) / static_cast<float>(num_samples);
+		auto sample_vec = (1.0f - t) * (1.0f - t) * p0 + 2.0f * (1.0f - t) * t * p1 + t * t * p2;
+		Point sample_point = { sample_vec.x, sample_vec.y };
+
+		if (IsAnyContains(sample_point, obstacles)) // Reuse your IsAnyContains
+		{
+			return true;
+		}
+
+		// Also check if clearance is too low (practically a collision)
+		if (GetClearanceAlongBezier(p0, p1, p2, obstacles, num_samples) < FLT_EPSILON)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// Smoothes the path by replacing sharp corners with Bezier curves
+std::vector<Point> SmoothPath(
+	const std::vector<Point>& original_path,
+	const std::vector<Polygon>& obstacles,
+	const VoronoiData& voronoi_data)
+{
+	if (original_path.size() < 3)
+	{
+		return original_path; // Cannot smooth a path with less than 3 points
+	}
+
+	std::vector<Point> smoothed_path;
+	smoothed_path.push_back(original_path.front()); // Start point is always fixed
+
+	for (size_t i = 1; i < original_path.size() - 1; ++i)
+	{
+		const Point& p_prev = original_path[i - 1];
+		const Point& p_curr = original_path[i];
+		const Point& p_next = original_path[i + 1];
+
+		// Try to smooth the corner at p_curr using a quadratic Bezier curve
+		// The control points are p_prev, p_curr, p_next
+		// This simple Bezier will pass through p_prev and p_next, and its tangent at p_prev will be along p_prev-p_curr,
+		// and its tangent at p_next will be along p_curr-p_next.
+		// The curve will 'bend' towards p_curr.
+
+		// A more advanced smoothing would involve calculating new control points that
+		// pull the curve away from obstacles, potentially using information about
+		// the Voronoi cell p_curr is in.
+
+		// For a basic quadratic Bezier, the intermediate points are on the curve.
+		// We'll replace the two segments (p_prev, p_curr) and (p_curr, p_next)
+		// with the Bezier curve if it's collision-free and has better/acceptable cost.
+
+		// Define a simple Bezier that uses a "midpoint" as a control point
+		// This is not a standard Bezier, but a common trick for corner rounding.
+		// A better approach for "smoothing" in the sense of the paper
+		// would involve finding a control point that pulls the curve into higher clearance regions.
+
+		// Let's use p_curr as the 'main' control point for a quadratic Bezier
+		// from a point near p_prev on (p_prev, p_curr) to a point near p_next on (p_curr, p_next).
+		// This is just one way to implement corner smoothing.
+
+		// Option 1: Simple quadratic Bezier through p_prev, p_curr, p_next
+		// Points on this curve are: B(t) = (1-t)^2 * p_prev + 2(1-t)t * p_curr + t^2 * p_next
+		// This replaces the *entire* path segment from p_prev to p_next via p_curr.
+		// This might be too aggressive if p_prev and p_next are far apart.
+
+		// Let's try a simpler corner-rounding:
+		// Create a small arc or Bezier segment that transitions from the incoming to outgoing segment.
+		// We need to define two points `s1` and `s2` on the segments `p_prev-p_curr` and `p_curr-p_next` respectively.
+		// Then, we'll try to insert a curve between `s1` and `s2`, with `p_curr` potentially as a control point.
+
+		float smoothing_radius = 25.f; // Adjust this based on desired smoothness and clearance
+		// Calculate points s1 and s2 along the segments, away from p_curr
+		auto s1v = (Vec2D)p_curr - (p_curr - p_prev).Normalize() * smoothing_radius;
+		auto s2v = (Vec2D)p_curr - (p_curr - p_next).Normalize() * smoothing_radius;
+
+		Point s1 = { s1v.x, s1v.y };
+		Point s2 = { s2v.x, s2v.y };
+
+		// Ensure s1 and s2 don't go past p_prev or p_next
+		if (Distance(p_prev, s1) < FLT_EPSILON)
+			s1 = p_prev;
+		if (Distance(p_next, s2) < FLT_EPSILON)
+			s2 = p_next;
+
+		// Option 2: Quadratic Bezier between s1 and s2, using p_curr as the control point
+		// B(t) = (1-t)^2 * s1 + 2(1-t)t * p_curr + t^2 * s2
+		// This curve replaces the corner part of the path.
+		// The path becomes: ... p_prev -> s1 -> (Bezier curve) -> s2 -> p_next ...
+
+		bool can_smooth = true;
+		// Check if the Bezier curve is collision-free and maintains sufficient clearance
+		if (IsBezierColliding(s1, p_curr, s2, obstacles))
+		{
+			can_smooth = false;
+		}
+
+		if (can_smooth)
+		{
+			// Add points along the Bezier curve to the smoothed path
+			smoothed_path.push_back(s1);
+			int num_bezier_segments = 10; // Number of straight line segments to approximate Bezier
+			for (int j = 1; j <= num_bezier_segments; ++j)
+			{
+				float t = static_cast<float>(j) / static_cast<float>(num_bezier_segments);
+				auto bezier_vec = (1.0f - t) * (1.0f - t) * s1 + 2.0f * (1.0f - t) * t * p_curr + t * t * s2;
+				Point bezier_point = { bezier_vec.x, bezier_vec.y };
+				smoothed_path.push_back(bezier_point);
+			}
+		}
+		else
+		{
+			// If smoothing not possible, just add the current point
+			smoothed_path.push_back(p_curr);
+		}
+	}
+
+	smoothed_path.push_back(original_path.back()); // End point is always fixed
+
+	return smoothed_path;
+}
+
 GraphData ConstructG1_Graph(
 	const std::vector<Segment>& segments_tilde_V,
 	const Point& start_node_s,
@@ -387,6 +576,8 @@ std::vector<Point> FindPath(
 		N_t_for_G1 = voronoi_data.all_tilde_V_cells[voronoi_data.t_cell_idx];
 	}
 
+	std::vector<Point> path;
+
 	if (type == GraphType::G1)
 	{
 		GraphData g1_construction_result = ConstructG1_Graph(
@@ -396,8 +587,7 @@ std::vector<Point> FindPath(
 
 		edges = GetAllEdges(G1);
 
-		auto path = RunDijkstraAlgorithm(G1, g1_point_to_vertex_map, start_node_s, goal_node_t);
-		return path;
+		path = RunDijkstraAlgorithm(G1, g1_point_to_vertex_map, start_node_s, goal_node_t);
 	}
 
 	if (type == GraphType::G2)
@@ -409,11 +599,15 @@ std::vector<Point> FindPath(
 
 		edges = GetAllEdges(G2);
 
-		auto path = RunDijkstraAlgorithm(G2, g2_point_to_vertex_map, start_node_s, goal_node_t);
-		return path;
+		path = RunDijkstraAlgorithm(G2, g2_point_to_vertex_map, start_node_s, goal_node_t);
 	}
 
-	return {};
+	if (!path.empty())
+	{
+		path = SmoothPath(path, obstacles, voronoi_data);
+	}
+
+	return path;
 }
 } // namespace
 

@@ -46,6 +46,8 @@ int main()
 	std::vector<Segment> edges;
 	bool isBuilding = false;
 
+	size_t segmentsPerArc = 2;
+
 	auto currGraphType = GraphType::G1;
 
 	Point start = { 100, 500 };
@@ -93,7 +95,7 @@ int main()
 
 				// !!! VORONOI GENERATION START !!!
 				Voronoi vd(window.GetBounds());
-				voronoiData = vd.Generate(obstacles, start, end, 8);
+				voronoiData = vd.Generate(obstacles, start, end, segmentsPerArc);
 
 				// !!! VORONOI GENERATION END !!!
 			}
@@ -112,7 +114,7 @@ int main()
 		{
 			// !!! PATH FINDING START !!!
 			Voronoi vd(window.GetBounds());
-			voronoiData = vd.Generate(obstacles, start, end, 8);
+			voronoiData = vd.Generate(obstacles, start, end, segmentsPerArc);
 
 			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			path = pathFinder.GetPath();
@@ -123,7 +125,7 @@ int main()
 		{
 			// !!! VORONOI GENERATION START !!!
 			Voronoi vd(window.GetBounds());
-			voronoiData = vd.Generate(obstacles, start, end, 8);
+			voronoiData = vd.Generate(obstacles, start, end, segmentsPerArc);
 
 			PathFinder pathFinder(currGraphType, voronoiData, obstacles, start, end);
 			edges = pathFinder.GetEdges();
@@ -149,10 +151,10 @@ int main()
 		window.Draw(start, Color::Magenta);
 		window.Draw(end, Color::Magenta);
 
-		for (const auto& cell : voronoiData.all_tilde_V_cells)
-		{
-			window.Draw(cell, Color(0, 255, 0, 64));
-		}
+		// for (const auto& cell : voronoiData.all_tilde_V_cells)
+		//{
+		//	window.Draw(cell, Color(0, 255, 0, 64));
+		// }
 
 		for (const auto& edge : voronoiData.refined_edges)
 		{

@@ -173,24 +173,6 @@ void DiscretizeRecursive(
 }
 
 // VORONOI
-bool Contains(const Point& point, const Polygon& polygon)
-{
-	namespace bg = boost::geometry;
-	namespace bgm = boost::geometry::model;
-
-	using boost_point_type = bgm::d2::point_xy<double>;
-	using boost_polygon_type = bgm::polygon<boost_point_type>;
-
-	boost_point_type bg_point(point.x, point.y);
-	boost_polygon_type bg_polygon;
-
-	for (const auto& [x, y] : polygon)
-	{
-		bg::append(bg_polygon.outer(), boost_point_type(x, y));
-	}
-
-	return bg::within(bg_point, bg_polygon);
-}
 
 using namespace boost::polygon;
 std::vector<Segment> DiscretizeParabolicVoronoiEdge(
