@@ -149,20 +149,20 @@ int main()
 		window.Draw(start, Color::Magenta);
 		window.Draw(end, Color::Magenta);
 
-		// for (const auto& cell : voronoiData.all_tilde_V_cells)
-		//{
-		//	window.Draw(cell, Color(0, 255, 0, 64));
-		// }
+		for (const auto& cell : voronoiData.all_tilde_V_cells)
+		{
+			window.Draw(cell, Color(0, 255, 0, 64));
+		}
 
 		for (const auto& edge : voronoiData.refined_edges)
 		{
 			window.Draw(edge, edge.color);
 		}
 
-		for (const auto& seg : edges)
-		{
-			window.Draw(seg, Color::Magenta);
-		}
+		// for (const auto& seg : edges)
+		//{
+		//	window.Draw(seg, Color::Magenta);
+		// }
 
 		for (const auto& seg : path)
 		{
@@ -174,14 +174,14 @@ int main()
 			window.Draw(obstacle, obstacleColor);
 		}
 
-		if (voronoiData.s_cell_idx != -1)
-		{
-			window.Draw(voronoiData.all_tilde_V_cells[voronoiData.s_cell_idx], Color(0, 255, 0, 64));
-		}
-		if (voronoiData.t_cell_idx != -1)
-		{
-			window.Draw(voronoiData.all_tilde_V_cells[voronoiData.t_cell_idx], Color(0, 255, 0, 64));
-		}
+		// if (voronoiData.s_cell_idx != -1)
+		//{
+		//	window.Draw(voronoiData.all_tilde_V_cells[voronoiData.s_cell_idx], Color(0, 255, 0, 64));
+		// }
+		// if (voronoiData.t_cell_idx != -1)
+		//{
+		//	window.Draw(voronoiData.all_tilde_V_cells[voronoiData.t_cell_idx], Color(0, 255, 0, 64));
+		// }
 
 		if (isBuilding && !currentObstacle.empty())
 		{

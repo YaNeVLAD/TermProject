@@ -61,6 +61,11 @@ struct Vec2D
 	{
 		return Vec2D{ x - rhs.x, y - rhs.y };
 	}
+
+	Vec2D operator*(const float& scale)
+	{
+		return Scale(scale);
+	}
 };
 
 struct Point
