@@ -17,6 +17,7 @@ add_executable(Term ../main.cpp
         Algorithm/Graph/Graph.h
         Algorithm/Voronoi/Voronoi.h
         Algorithm/Voronoi/Voronoi.cpp
+        Algorithm/Voronoi/Helpers.h
         Algorithm/Structures/BoostCompat.h
         Utility/Logger/Logger.h
         Utility/Logger/Logger.cpp

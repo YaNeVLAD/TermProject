@@ -9,6 +9,8 @@
 #include <cmath>
 #include <vector>
 
+#include "Color/Color.h"
+
 namespace tp::shapes
 {
 struct Vec2D
@@ -106,13 +108,61 @@ struct Point
 struct Segment
 {
 	Point p1, p2;
+	Color color;
 
-	auto operator<=>(const Segment&) const = default;
+	Segment() = default;
+	Segment(const Segment&) = default;
+	Segment(Segment&&) = default;
+
+	Segment& operator=(const Segment&) = default;
+	Segment& operator=(Segment&&) = default;
+
+	Segment(const Point& p1, const Point& p2)
+		: p1(p1)
+		, p2(p2)
+	{
+	}
+
+	Segment(const Point& p1, const Point& p2, Color color)
+		: p1(p1)
+		, p2(p2)
+		, color(color)
+	{
+	}
+
+	auto operator<=>(const Segment& other) const
+	{
+		if (auto cmp = p1 <=> other.p1; cmp != 0)
+		{
+			return cmp;
+		}
+		return p2 <=> other.p2;
+	}
 };
 
 struct BorderRect
 {
 	float left, top, right, bottom;
+
+	Point LeftTop() const
+	{
+		return { left, top };
+	}
+
+	Point RightTop() const
+	{
+		return { right, top };
+	}
+
+	Point LeftBottom() const
+	{
+		return { left, bottom };
+	}
+
+	Point RightBottom() const
+	{
+		return { right, bottom };
+	}
 };
 
 using Polygon = std::vector<Point>;

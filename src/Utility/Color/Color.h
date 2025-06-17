@@ -5,6 +5,7 @@
 #ifndef COLOR_H
 #define COLOR_H
 
+#include <compare>
 #include <cstdint>
 
 namespace tp
@@ -12,15 +13,17 @@ namespace tp
 struct Color
 {
 	Color();
-	Color(Color&& other) = default;
-	Color(const Color& other) noexcept = default;
+	Color(Color&&) = default;
+	Color(const Color&) noexcept = default;
+
+	Color& operator=(const Color&) = default;
+	Color& operator=(Color&&) = default;
 
 	explicit Color(uint32_t hex);
 
 	Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
-	Color& operator=(const Color& other) = default;
-	Color& operator=(Color&& other) noexcept = default;
+	auto operator<=>(const Color&) const = default;
 
 	static const Color Red;
 	static const Color Green;

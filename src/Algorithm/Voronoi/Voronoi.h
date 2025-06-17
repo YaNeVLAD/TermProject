@@ -36,7 +36,8 @@ public:
 	[[nodiscard]] VoronoiData Generate(
 		const std::vector<shapes::Polygon>& polygons,
 		const shapes::Point& start_point_s,
-		const shapes::Point& target_point_t);
+		const shapes::Point& target_point_t,
+		size_t num_segments_parabola = 4);
 
 	[[nodiscard]] const VoronoiData& GetLastGeneration() const;
 

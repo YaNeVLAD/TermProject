@@ -4,6 +4,7 @@
 
 #include "PathFinder.h"
 
+#include "../../Utility/Logger/Logger.h"
 #include "../Math/Math.hpp"
 #include "../Structures/BoostCompat.h"
 
@@ -95,13 +96,27 @@ struct GraphData
 	std::map<Point, boost_compat::Vertex> point_to_vertex_map;
 };
 
+bool IsAnyContains(const Point& point, const std::vector<Polygon>& obstacles)
+{
+	bool contains = false;
+	for (const auto& obstacle : obstacles)
+	{
+		if (Contains(point, obstacle))
+		{
+			contains = true;
+			break;
+		}
+	}
+	return contains;
+}
+
 GraphData ConstructG1_Graph(
 	const std::vector<Segment>& segments_tilde_V,
 	const Point& start_node_s,
 	const Point& goal_node_t,
 	const std::vector<Polygon>& obstacles,
-	const std::vector<Point>& N_s,
-	const std::vector<Point>& N_t)
+	const Polygon& N_s,
+	const Polygon& N_t)
 {
 	using namespace boost_compat;
 
@@ -109,7 +124,7 @@ GraphData ConstructG1_Graph(
 	graph_points_collector.push_back(start_node_s);
 	graph_points_collector.push_back(goal_node_t);
 
-	for (const auto& [p1, p2] : segments_tilde_V)
+	for (const auto& [p1, p2, color] : segments_tilde_V)
 	{
 		graph_points_collector.push_back(p1);
 		graph_points_collector.push_back(p2);
@@ -123,7 +138,7 @@ GraphData ConstructG1_Graph(
 		graph_points_collector.push_back(p_nt);
 	}
 
-	std::sort(graph_points_collector.begin(), graph_points_collector.end());
+	std::ranges::sort(graph_points_collector);
 	graph_points_collector.erase(
 		std::ranges::unique(graph_points_collector).begin(),
 		graph_points_collector.end());
@@ -142,13 +157,19 @@ GraphData ConstructG1_Graph(
 	Vertex t_vertex_local = point_to_vertex_map_local.at(goal_node_t);
 
 	// 1. Добавляем ребра (w, w') для segments_tilde_V
-	for (const auto& [p1, p2] : segments_tilde_V)
+	for (const auto& [p1, p2, color] : segments_tilde_V)
 	{
 		if (point_to_vertex_map_local.contains(p1) && point_to_vertex_map_local.contains(p2) && p1 != p2)
 		{
 			Vertex u = point_to_vertex_map_local.at(p1);
 			Vertex v = point_to_vertex_map_local.at(p2);
 			double cost = CalculateEdgeCost(p1, p2, obstacles);
+			if (cost == std::numeric_limits<double>::max())
+			{
+				LOG_DEBUG(std::format("Max cost edge detected: [{}, {}],[{}, {}]",
+					p1.x, p1.y, p2.x, p2.y));
+			}
+
 			if (cost < std::numeric_limits<double>::max())
 			{
 				boost::add_edge(u, v, cost, G1_local);
@@ -159,12 +180,19 @@ GraphData ConstructG1_Graph(
 	// 2. Добавляем ребра (s, w) для w из N_s
 	for (const auto& w_point : N_s)
 	{
-		if (point_to_vertex_map_local.count(w_point))
+		if (point_to_vertex_map_local.contains(w_point))
 		{
 			Vertex w_vertex = point_to_vertex_map_local.at(w_point);
 			if (start_node_s != w_point)
 			{
 				double cost_sw = CalculateEdgeCost(start_node_s, w_point, obstacles);
+
+				if (cost_sw == std::numeric_limits<double>::max())
+				{
+					LOG_DEBUG(std::format("Max cost edge detected: [{}, {}],[{}, {}]",
+						start_node_s.x, start_node_s.y, w_point.x, w_point.y));
+				}
+
 				if (cost_sw < std::numeric_limits<double>::max())
 				{
 					boost::add_edge(s_vertex_local, w_vertex, cost_sw, G1_local);
@@ -182,6 +210,12 @@ GraphData ConstructG1_Graph(
 			if (goal_node_t != w_point)
 			{
 				double cost_wt = CalculateEdgeCost(w_point, goal_node_t, obstacles);
+				if (cost_wt == std::numeric_limits<double>::max())
+				{
+					LOG_DEBUG(std::format("Max cost edge detected: [{}, {}],[{}, {}]",
+						start_node_s.x, start_node_s.y, w_point.x, w_point.y));
+				}
+
 				if (cost_wt < std::numeric_limits<double>::max())
 				{
 					boost::add_edge(w_vertex, t_vertex_local, cost_wt, G1_local);
@@ -207,23 +241,13 @@ GraphData ConstructG2_Graph(
 
 	// Вершины G2 - это s, t и все вершины $\tilde{\mathcal{V}}$
 	// (уникальные конечные точки ребер refined_edges)
-	for (const auto& [p1, p2] : voronoi_data.refined_edges)
+	for (const auto& [p1, p2, color] : voronoi_data.refined_edges)
 	{
 		graph_points_collector.push_back(p1);
 		graph_points_collector.push_back(p2);
 	}
-	// Вершины ячеек также являются частью V(tilde_V) и уже должны быть учтены выше.
-	// Добавление их из voronoi_data.all_tilde_V_cells ниже - для полноты, если
-	// refined_edges могли не покрыть какие-то изолированные вершины (маловероятно).
-	for (const auto& cell_T_poly : voronoi_data.all_tilde_V_cells)
-	{
-		for (const auto& v_of_T : cell_T_poly)
-		{
-			graph_points_collector.push_back(v_of_T);
-		}
-	}
 
-	std::sort(graph_points_collector.begin(), graph_points_collector.end());
+	std::ranges::sort(graph_points_collector);
 	graph_points_collector.erase(
 		std::ranges::unique(graph_points_collector).begin(),
 		graph_points_collector.end());
@@ -259,6 +283,13 @@ GraphData ConstructG2_Graph(
 					Vertex v_vertex = point_to_vertex_map_local.at(v_point);
 
 					double cost = CalculateEdgeCost(u_point, v_point, obstacles);
+
+					if (cost == std::numeric_limits<double>::max())
+					{
+						LOG_DEBUG(std::format("Max cost edge detected: [{}, {}],[{}, {}]",
+							u_point.x, u_point.y, v_point.x, v_point.y));
+					}
+
 					if (cost < std::numeric_limits<double>::max())
 					{
 						// Это ребро может дублировать ребро из refined_edges, если u,v были смежными.
@@ -274,7 +305,7 @@ GraphData ConstructG2_Graph(
 	}
 
 	// Соединения для s, если s находится в известной ячейке
-	if (voronoi_data.s_cell_idx != -1 && static_cast<size_t>(voronoi_data.s_cell_idx) < voronoi_data.all_tilde_V_cells.size())
+	if (voronoi_data.s_cell_idx != -1 && voronoi_data.s_cell_idx < voronoi_data.all_tilde_V_cells.size())
 	{
 		const Polygon& V_Ts = voronoi_data.all_tilde_V_cells[voronoi_data.s_cell_idx]; // Вершины ячейки T_s
 		Vertex s_vertex = point_to_vertex_map_local.at(start_node_s); // Получаем Vertex для s
@@ -293,7 +324,7 @@ GraphData ConstructG2_Graph(
 	}
 
 	// Соединения для t, если t находится в известной ячейке
-	if (voronoi_data.t_cell_idx != -1 && static_cast<size_t>(voronoi_data.t_cell_idx) < voronoi_data.all_tilde_V_cells.size())
+	if (voronoi_data.t_cell_idx != -1 && voronoi_data.t_cell_idx < voronoi_data.all_tilde_V_cells.size())
 	{
 		const Polygon& V_Tt = voronoi_data.all_tilde_V_cells[voronoi_data.t_cell_idx]; // Вершины ячейки T_t
 		Vertex t_vertex = point_to_vertex_map_local.at(goal_node_t); // Получаем Vertex для t
@@ -339,7 +370,8 @@ std::vector<Point> FindPath(
 	const VoronoiData& voronoi_data,
 	const Point& start_node_s,
 	const Point& goal_node_t,
-	const std::vector<Polygon>& obstacles)
+	const std::vector<Polygon>& obstacles,
+	std::vector<Segment>& edges)
 {
 	using namespace boost_compat;
 
@@ -354,12 +386,15 @@ std::vector<Point> FindPath(
 	{
 		N_t_for_G1 = voronoi_data.all_tilde_V_cells[voronoi_data.t_cell_idx];
 	}
+
 	if (type == GraphType::G1)
 	{
 		GraphData g1_construction_result = ConstructG1_Graph(
 			voronoi_data.refined_edges, start_node_s, goal_node_t, obstacles, N_s_for_G1, N_t_for_G1);
 		const Graph& G1 = g1_construction_result.graph;
 		auto& g1_point_to_vertex_map = g1_construction_result.point_to_vertex_map;
+
+		edges = GetAllEdges(G1);
 
 		auto path = RunDijkstraAlgorithm(G1, g1_point_to_vertex_map, start_node_s, goal_node_t);
 		return path;
@@ -372,6 +407,8 @@ std::vector<Point> FindPath(
 		const Graph& G2 = g2_construction_result.graph;
 		auto& g2_point_to_vertex_map = g2_construction_result.point_to_vertex_map;
 
+		edges = GetAllEdges(G2);
+
 		auto path = RunDijkstraAlgorithm(G2, g2_point_to_vertex_map, start_node_s, goal_node_t);
 		return path;
 	}
@@ -380,13 +417,13 @@ std::vector<Point> FindPath(
 }
 } // namespace
 
-tp::PathFinder::PathFinder(
+PathFinder::PathFinder(
 	GraphType type,
 	const VoronoiData& voronoi_data,
-	const std::vector<shapes::Polygon>& obstacles,
-	const shapes::Point& start, const shapes::Point& end)
+	const std::vector<Polygon>& obstacles,
+	const Point& start, const Point& end)
 {
-	m_path = FindPath(type, voronoi_data, start, end, obstacles);
+	m_path = FindPath(type, voronoi_data, start, end, obstacles, m_edges);
 }
 
 std::vector<Segment> PathFinder::GetPath() const
@@ -405,4 +442,9 @@ std::vector<Segment> PathFinder::GetPath() const
 	}
 
 	return segPath;
+}
+
+std::vector<shapes::Segment> tp::PathFinder::GetEdges() const
+{
+	return m_edges;
 }

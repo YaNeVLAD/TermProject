@@ -56,6 +56,25 @@ inline shapes::Point VertexToPoint(const VoronoiVertex& vertex)
 	return { static_cast<float>(vertex.x()), static_cast<float>(vertex.y()) };
 }
 
+inline std::vector<shapes::Segment> GetAllEdges(const Graph& graph)
+{
+	std::vector<shapes::Segment> segments;
+
+	Graph::edge_iterator ei, ei_end;
+	for (std::tie(ei, ei_end) = boost::edges(graph); ei != ei_end; ++ei)
+	{
+		Vertex u = boost::source(*ei, graph);
+		Vertex v = boost::target(*ei, graph);
+
+		shapes::Point p1 = graph[u];
+		shapes::Point p2 = graph[v];
+
+		segments.emplace_back(p1, p2);
+	}
+
+	return segments;
+}
+
 class DijkstraShortestPath
 {
 public:

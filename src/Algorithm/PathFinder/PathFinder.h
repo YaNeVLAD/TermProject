@@ -29,7 +29,10 @@ public:
 
 	[[nodiscard]] std::vector<shapes::Segment> GetPath() const;
 
+	[[nodiscard]] std::vector<shapes::Segment> GetEdges() const;
+
 private:
+	std::vector<shapes::Segment> m_edges;
 	std::vector<shapes::Point> m_path;
 };
 } // namespace tp
