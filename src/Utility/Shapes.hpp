@@ -89,6 +89,11 @@ struct Point
 		return Point{ x + other.x, y + other.y };
 	}
 
+	Point operator-(const Vec2D& vec) const
+	{
+		return Point{ x - vec.x, y - vec.y };
+	}
+
 	Point operator*(const Vec2D& vec) const
 	{
 		return { x * vec.x, y * vec.y };

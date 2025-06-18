@@ -10,25 +10,6 @@
 #include "src/Utility/Logger/Logger.h"
 #include "src/Window/Window.h"
 
-// В экранных координатах (Y вниз) результат > 0 означает CW порядок, < 0 - CCW.
-float ComputeSignedArea(const tp::shapes::Polygon& polygon)
-{
-	float area = 0.0f;
-	size_t n = polygon.size();
-	if (n < 3)
-	{
-		return 0.0f;
-	}
-
-	for (size_t i = 0; i < n; ++i)
-	{
-		const auto& [ax, ay] = polygon[i];
-		const auto& [bx, by] = polygon[(i + 1) % n];
-		area += ax * by - bx * ay; // Формула шнуровки
-	}
-	return area / 2.0f;
-}
-
 // Подумать как сделать последовательные аппроксимации через стратегию
 
 // Добавить рамку препятствия, внутри будем всё искать
@@ -168,7 +149,7 @@ int main()
 
 		for (const auto& seg : path)
 		{
-			window.Draw(seg, pathColor);
+			window.Draw(seg, pathColor, 3.f);
 		}
 
 		for (const auto& obstacle : obstacles)

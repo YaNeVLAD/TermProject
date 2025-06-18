@@ -84,7 +84,7 @@ inline bool IsIntersect(const shapes::Vec2D& p1, const shapes::Vec2D& p2, const 
 inline bool Contains(const shapes::Point& point, const shapes::Polygon& polygon)
 {
 	int intersections = 0;
-	int n = polygon.size();
+	size_t n = polygon.size();
 
 	if (n < 3)
 	{
@@ -108,14 +108,6 @@ inline bool Contains(const shapes::Point& point, const shapes::Polygon& polygon)
 	return intersections % 2 == 1;
 }
 
-/**
- * @brief Вычисляет квадрат минимального расстояния от точки p до отрезка ab.
- *
- * @param p Точка, от которой ищется расстояние.
- * @param a Первая точка отрезка.
- * @param b Вторая точка отрезка.
- * @return Квадрат расстояния от точки p до отрезка ab.
- */
 inline float DistanceToSegmentSquared(const shapes::Point& p, const shapes::Point& a, const shapes::Point& b)
 {
 	const shapes::Vec2D ab = b - a;
@@ -158,6 +150,73 @@ inline float DistanceToSegmentSquared(const shapes::Point& p, const shapes::Poin
 	//                                                              | ab.x  ab.y |
 	const float cross_product_z = ap.x * ab.y - ap.y * ab.x;
 	return (cross_product_z * cross_product_z) / ab_len_sq;
+}
+
+inline double CalculateEdgeCost(const shapes::Point& p1, const shapes::Point& p2,
+	const std::vector<shapes::Polygon>& obstacles)
+{
+	using namespace shapes;
+	float segment_length = Distance(p1, p2);
+	if (segment_length < FLT_EPSILON)
+	{
+		return 0.0;
+	}
+
+	auto get_clearance = [&](const Point& p) -> float {
+		float min_dist_sq = std::numeric_limits<float>::max();
+		if (obstacles.empty())
+		{
+			return std::sqrt(std::numeric_limits<float>::max());
+		}
+
+		for (const auto& polygon : obstacles)
+		{
+			if (polygon.empty())
+				continue;
+			for (size_t i = 0; i < polygon.size() - 1; ++i)
+			{
+				size_t curr = i;
+				size_t next = i + 1;
+				const auto& v1 = polygon[curr];
+				const auto& v2 = polygon[next];
+				float d_sq = DistanceToSegmentSquared(p, v1, v2);
+				if (d_sq < min_dist_sq)
+				{
+					min_dist_sq = d_sq;
+				}
+			}
+		}
+
+		if (min_dist_sq < FLT_EPSILON * FLT_EPSILON)
+			return FLT_EPSILON;
+		return std::sqrt(min_dist_sq);
+	};
+
+	int num_steps = 50;
+
+	double integral_sum = 0.0;
+	Vec2D segment_vector = p2 - p1;
+
+	float delta_s = segment_length / static_cast<float>(num_steps);
+
+	for (int i = 0; i < num_steps; ++i)
+	{
+		float t = static_cast<float>(i) / static_cast<float>(num_steps);
+		Point current_step_start_point = p1 + segment_vector.Scale(t);
+
+		float clearance_at_step_start = get_clearance(current_step_start_point);
+
+		if (clearance_at_step_start < FLT_EPSILON)
+		{
+			return std::numeric_limits<double>::max();
+		}
+
+		integral_sum += (1.0 / static_cast<double>(clearance_at_step_start));
+	}
+
+	double cost = integral_sum * static_cast<double>(delta_s);
+
+	return cost;
 }
 } // namespace tp::math
 

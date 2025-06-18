@@ -4,7 +4,7 @@
 
 #include "Window.h"
 
-#include <SFML/Graphics.hpp>
+#include "SFML/Graphics.hpp"
 
 using namespace tp;
 using namespace shapes;
@@ -38,6 +38,44 @@ void Window::Draw(const Segment& segment, Color color) const
 		{ sf::Vector2f(segment.p2.x, segment.p2.y), _color },
 	};
 	m_window->draw(line, std::size(line), sf::PrimitiveType::LineStrip);
+}
+
+void Window::Draw(const Segment& segment, Color color, float thickness) const
+{
+	if (thickness <= 1.0f)
+	{
+		Draw(segment, color);
+		return;
+	}
+
+	auto _color = sf::Color(color.ToInt());
+
+	sf::Vector2f p1(segment.p1.x, segment.p1.y);
+	sf::Vector2f p2(segment.p2.x, segment.p2.y);
+
+	sf::Vector2f direction = p2 - p1;
+	float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+
+	if (length == 0)
+	{
+		Draw(Point(p1.x, p1.y), color);
+		return;
+	}
+
+	sf::Vector2f unitDirection = direction / length;
+	sf::Vector2f unitPerpendicular(-unitDirection.y, unitDirection.x);
+
+	sf::Vector2f offset = unitPerpendicular * (thickness / 2.0f);
+
+	sf::ConvexShape thickLine;
+	thickLine.setPointCount(4);
+	thickLine.setPoint(0, p1 - offset);
+	thickLine.setPoint(1, p2 - offset);
+	thickLine.setPoint(2, p2 + offset);
+	thickLine.setPoint(3, p1 + offset);
+	thickLine.setFillColor(_color);
+
+	m_window->draw(thickLine);
 }
 
 void Window::Draw(const Polygon& polygon, Color color, bool isFilled) const
@@ -80,36 +118,33 @@ void Window::Render(Color backgroundColor) const
 
 void Window::PollEvents() const
 {
-	static auto onClose = [this](const sf::Event::Closed&) {
+	sf::Event event;
+	m_window->pollEvent(event);
+	if (event.type == sf::Event::Closed)
+	{
 		m_window->close();
-	};
-
-	static auto onKeyPressed = [this](const sf::Event::KeyPressed& ev) {
-		auto key = static_cast<keyboard::Key>(ev.code);
+	}
+	if (event.type == sf::Event::KeyPressed)
+	{
+		auto key = static_cast<keyboard::Key>(event.key.code);
 		if (m_onKeyPressedCallback)
 		{
 			m_onKeyPressedCallback(key);
 		}
-	};
-
-	static auto onMousePressed = [this](const sf::Event::MouseButtonPressed& ev) {
-		auto pos = m_window->mapPixelToCoords(ev.position);
-		auto button = ev.button;
+	}
+	if (event.type == sf::Event::MouseButtonPressed)
+	{
+		auto pos = m_window->mapPixelToCoords({ event.mouseButton.x, event.mouseButton.y });
+		auto button = event.mouseButton.button;
 		m_onClickCallback(static_cast<int>(button), pos.x, pos.y);
-	};
-
-	static auto onWindowResize = [this](const sf::Event::Resized& ev) {
-		sf::Vector2f newSize(ev.size);
+	}
+	if (event.type == sf::Event::Resized)
+	{
+		sf::Vector2f newSize(event.size.width, event.size.height);
 		sf::View view = m_window->getView();
 		view.setSize(newSize);
 		m_window->setView(view);
-	};
-
-	m_window->handleEvents(
-		onClose,
-		onKeyPressed,
-		onMousePressed,
-		onWindowResize);
+	}
 }
 
 bool Window::IsRunning() const
@@ -120,6 +155,45 @@ bool Window::IsRunning() const
 void Window::Close() const
 {
 	m_window->close();
+}
+
+void tp::Window::Clear(Color color) const
+{
+	m_window->clear(sf::Color{ color.ToInt() });
+}
+
+void tp::Window::Display() const
+{
+	m_window->display();
+}
+
+void tp::Window::HandleEvent(const sf::Event& event) const
+{
+	if (event.type == sf::Event::Closed)
+	{
+		m_window->close();
+	}
+	if (event.type == sf::Event::KeyPressed)
+	{
+		auto key = static_cast<keyboard::Key>(event.key.code);
+		if (m_onKeyPressedCallback)
+		{
+			m_onKeyPressedCallback(key);
+		}
+	}
+	if (event.type == sf::Event::MouseButtonPressed)
+	{
+		auto pos = m_window->mapPixelToCoords({ event.mouseButton.x, event.mouseButton.y });
+		auto button = event.mouseButton.button;
+		m_onClickCallback(static_cast<int>(button), pos.x, pos.y);
+	}
+	if (event.type == sf::Event::Resized)
+	{
+		sf::Vector2f newSize(event.size.width, event.size.height);
+		sf::View view = m_window->getView();
+		view.setSize(newSize);
+		m_window->setView(view);
+	}
 }
 
 void Window::SetMouseCallback(MouseCallbackFunc&& callback)

@@ -14,6 +14,7 @@ add_executable(Term ../main.cpp
         Algorithm/PathFinder/PathFinder.cpp
         Algorithm/PathFinder/PathFinder.h
         Algorithm/Graph/Graph.cpp
+        Window/GUI/UserInterface.cpp
         Algorithm/Graph/Graph.h
         Algorithm/Voronoi/Voronoi.h
         Algorithm/Voronoi/Voronoi.cpp
@@ -23,7 +24,11 @@ add_executable(Term ../main.cpp
         Utility/Logger/Logger.cpp
         Utility/Logger/DefaultAppenders.h
         Utility/Logger/ILogAppender.h
-        Window/Keyboard.hpp)
+        Window/Keyboard.hpp 
+        Window/GUI/IGui.h
+        Window/GUI/UserInterface.h 
+        Application/App.cpp
+        Application/App.h)
 target_compile_features(Term PRIVATE cxx_std_20)
 target_link_libraries(Term PRIVATE SFML::Graphics)
 target_link_libraries(Term PRIVATE Boost::boost)

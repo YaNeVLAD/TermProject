@@ -16,8 +16,9 @@
 
 namespace sf
 {
+class Event;
 class RenderWindow;
-}
+} // namespace sf
 
 namespace tp
 {
@@ -32,6 +33,7 @@ public:
 
 	void Draw(const shapes::Point& point, Color color = Color::White) const;
 	void Draw(const shapes::Segment& segment, Color color = Color::White) const;
+	void Draw(const shapes::Segment& segment, Color color, float thickness) const;
 	void Draw(const shapes::Polygon& polygon, Color color = Color::Green, bool isFilled = true) const;
 
 	void Render(Color backgroundColor = Color::Black) const;
@@ -41,11 +43,17 @@ public:
 
 	void Close() const;
 
+	void Clear(Color color = Color::White) const;
+	void Display() const;
+	void HandleEvent(const sf::Event& event) const;
+
 	void SetMouseCallback(MouseCallbackFunc&& callback);
 
 	void SetKeyboardCallback(KeyboardCallbackFunc&& callback);
 
 	shapes::BorderRect GetBounds() const;
+
+	sf::RenderWindow* GetRaw() const { return m_window.get(); };
 
 private:
 	KeyboardCallbackFunc m_onKeyPressedCallback = nullptr;

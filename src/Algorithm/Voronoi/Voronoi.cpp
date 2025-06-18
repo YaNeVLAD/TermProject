@@ -1,10 +1,5 @@
-//
-// Created by User on 19.04.2025.
-//
-
 #include "Voronoi.h"
 
-#include <boost/geometry.hpp>
 #include <boost/polygon/voronoi.hpp>
 
 #include "../../Utility/Logger/Logger.h"
@@ -12,8 +7,6 @@
 #include "../PathFinder/PathFinder.h"
 #include "../Structures/BoostCompat.h"
 #include "Helpers.h"
-
-#include <boost/geometry.hpp>
 
 #include <format>
 #include <optional>
@@ -30,8 +23,8 @@ struct ObstacleFeature
 	};
 
 	Type type;
-	Point vertex_site; // Значимо, если type == VERTEX
-	Segment segment_site; // Значимо, если type == SEGMENT
+	Point vertex_site;
+	Segment segment_site;
 
 	explicit ObstacleFeature(Point vertex)
 		: type(Type::VERTEX)
@@ -45,37 +38,32 @@ struct ObstacleFeature
 	{
 	}
 
-	// $\psi_o(x)$ - возвращает ближайшую точку на данной особенности 'o' к точке 'x'
-	Point getPsi(const Point& p) const
+	Point GetPsi(const Point& p) const
 	{
 		if (type == Type::VERTEX)
 		{
 			return vertex_site;
 		}
-		// Type::SEGMENT
 		const Vec2D ab = segment_site.p2 - segment_site.p1;
-		const auto [x, y] = p - segment_site.p1; // Вектор от начала сегмента до точки x
+		const auto [x, y] = p - segment_site.p1;
 
 		const float ab_len_sq = ab.LengthSquared();
 
-		// Если сегмент вырожден в точку
 		if (ab_len_sq < FLT_EPSILON * FLT_EPSILON)
 		{
 			return segment_site.p1;
 		}
 
-		// t = dot(ax, ab) / dot(ab, ab)
 		float t = (x * ab.x + y * ab.y) / ab_len_sq;
 
 		if (t < 0.0f)
 		{
-			return segment_site.p1; // Ближайшая точка - p1
+			return segment_site.p1;
 		}
 		if (t > 1.0f)
 		{
-			return segment_site.p2; // Ближайшая точка - p2
+			return segment_site.p2;
 		}
-		// Проекция лежит на отрезке
 		return segment_site.p1 + ab.Scale(t);
 	}
 };
@@ -88,9 +76,9 @@ struct Edge
 
 namespace
 {
-float distance_point_to_feature(const Point& p, const ObstacleFeature& feature)
+float DistancePointToFeature(const Point& p, const ObstacleFeature& feature)
 {
-	Point closest_on_feature = feature.getPsi(p);
+	Point closest_on_feature = feature.GetPsi(p);
 	return (p - closest_on_feature).Length();
 }
 
@@ -147,7 +135,6 @@ void PrepareBoostInputs(
 	std::vector<BoostSegment>& out_boost_segments,
 	std::vector<BoostInputSourceInfo>& out_source_info_map)
 {
-	// Добавляем рамку
 	float left = borderRect.left;
 	float top = borderRect.top;
 	float right = borderRect.right;
@@ -155,7 +142,7 @@ void PrepareBoostInputs(
 
 	auto add_border_segment = [&](Point p1, Point p2) {
 		out_boost_segments.emplace_back(point_data(p1.x, p1.y), point_data(p2.x, p2.y));
-		out_source_info_map.emplace_back(true, Segment{ p1, p2 }); // is_obstacle_related = false
+		out_source_info_map.emplace_back(false, Segment{ p1, p2 });
 	};
 
 	add_border_segment({ left, top }, { right, top });
@@ -163,7 +150,6 @@ void PrepareBoostInputs(
 	add_border_segment({ right, bottom }, { left, bottom });
 	add_border_segment({ left, bottom }, { left, top });
 
-	// Добавляем сегменты полигонов-препятствий
 	for (const auto& polygon : polygons)
 	{
 		size_t n = polygon.size();
@@ -172,7 +158,7 @@ void PrepareBoostInputs(
 			Point p1_shape = polygon[i];
 			Point p2_shape = polygon[(i + 1) % n];
 			out_boost_segments.emplace_back(point_data(p1_shape.x, p1_shape.y), point_data(p2_shape.x, p2_shape.y));
-			out_source_info_map.emplace_back(true, Segment{ p1_shape, p2_shape }); // is_obstacle_related = true
+			out_source_info_map.emplace_back(true, Segment{ p1_shape, p2_shape });
 		}
 	}
 }
@@ -250,7 +236,7 @@ std::vector<Edge> GenerateTildeVEdges(
 			{
 				size_t source_idx = cell->source_index();
 				int category = cell->source_category();
-				size_t site_key = source_idx * 10 + category; // Уникальный ключ для сайта
+				size_t site_key = source_idx * 10 + category;
 
 				if (processed_sites.contains(site_key))
 				{
@@ -262,7 +248,7 @@ std::vector<Edge> GenerateTildeVEdges(
 					std::optional<ObstacleFeature> feature_o = FindObstacleFeature(cell, source_info_map);
 					if (feature_o)
 					{
-						add_segment_if_valid(x_vor_vertex, feature_o->getPsi(x_vor_vertex), source_idx, Color::Blue);
+						add_segment_if_valid(x_vor_vertex, feature_o->GetPsi(x_vor_vertex), source_idx, Color::Blue);
 						processed_sites.insert(site_key);
 					}
 				}
@@ -271,8 +257,8 @@ std::vector<Edge> GenerateTildeVEdges(
 		} while (current_iter_edge != incident_edge);
 	}
 #endif
-// 3. Добавление ребер типа (ii): x_min * psi_o(x_min)
-#if 0
+// 3. Ребер типа (ii): x_min * psi_o(x_min)
+#if 1
 	for (const auto& cell : vd.cells())
 	{
 		size_t source_idx = cell.source_index();
@@ -299,7 +285,7 @@ std::vector<Edge> GenerateTildeVEdges(
 			Point x_star;
 			if (v_edge->is_linear())
 			{
-				x_star = (distance_point_to_feature(p_a, *feature_o) <= distance_point_to_feature(p_b, *feature_o)) ? p_a : p_b;
+				x_star = (DistancePointToFeature(p_a, *feature_o) <= DistancePointToFeature(p_b, *feature_o)) ? p_a : p_b;
 			}
 			else
 			{
@@ -308,8 +294,8 @@ std::vector<Edge> GenerateTildeVEdges(
 
 				for (const auto& [p1, p2, color] : discretized_segments)
 				{
-					float dist_pa_to_o = distance_point_to_feature(p1, *feature_o);
-					float dist_pb_to_o = distance_point_to_feature(p2, *feature_o);
+					float dist_pa_to_o = DistancePointToFeature(p1, *feature_o);
+					float dist_pb_to_o = DistancePointToFeature(p2, *feature_o);
 
 					if (dist_pa_to_o <= dist_pb_to_o)
 					{
@@ -321,7 +307,7 @@ std::vector<Edge> GenerateTildeVEdges(
 					}
 				}
 			}
-			add_segment_if_valid(x_star, feature_o->getPsi(x_star), source_idx, Color::Cyan);
+			add_segment_if_valid(x_star, feature_o->GetPsi(x_star), source_idx, Color::Cyan);
 			v_edge = v_edge->next();
 		} while (v_edge != start_iter_edge);
 	}
@@ -346,7 +332,7 @@ Point ToPoint(const bg::model::d2::point_xy<float>& bg_point)
  * @param source_info_map Карта информации об исходных сайтах (НЕОБХОДИМА для определения направления).
  * @return true, если обрезка прошла успешно и точки добавлены; false в противном случае.
  */
-bool clip_infinite_voronoi_edge(
+bool ClipInfiniteVoronoiEdge(
 	const voronoi_diagram<double>::edge_type* edge,
 	std::vector<Point>& clipped_points,
 	const bg::model::box<bg::model::d2::point_xy<double>>& clipping_box,
@@ -397,7 +383,7 @@ std::vector<Polygon> ReconstructTildeVTopology(
 				else
 				{
 					// TODO: Not yet implemented
-					if (!clip_infinite_voronoi_edge(edge, temp_edge_points, clipping_box, source_info_map))
+					if (!ClipInfiniteVoronoiEdge(edge, temp_edge_points, clipping_box, source_info_map))
 					{
 						current_cell_points.clear();
 						break;
@@ -503,9 +489,6 @@ VoronoiData ConstructRefined(
 	{
 		LOG_CRITICAL(std::format("Failed to locate target point [{}, {}] in any tilde_V cell.", target_point_t.x, target_point_t.y));
 	}
-
-	// RemoveSegmentsWithPoints(data.refined_edges,
-	//{ borderRect.LeftTop(), borderRect.RightBottom(), borderRect.RightTop(), borderRect.LeftBottom() });
 
 	return data;
 }

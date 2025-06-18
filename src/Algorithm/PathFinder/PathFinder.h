@@ -21,7 +21,7 @@ enum class GraphType
 class PathFinder
 {
 public:
-	PathFinder(
+	[[nodiscard]] std::vector<shapes::Segment> FindPath(
 		GraphType type,
 		const VoronoiData& voronoi_data,
 		const std::vector<shapes::Polygon>& obstacles,
